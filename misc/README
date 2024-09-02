@@ -1,0 +1,30 @@
+
+The header files in this directory are used for the testbenches in `tb`. Those 
+tests may rely on the environment being set up using the files in here. This 
+entails the register file being set up with these test headers, and the xilinx 
+IPs being generated as per the `xips_user.tcl` script.
+
+# HEADERS
+
+The `.svh` files are example header files for configuring the axi-lite driven 
+`axi_lite_reg_file_*` register file modules. These headers are not meant to be 
+included in a project (in this location). This is taken care of in 
+m_code_manager-generated projects, because by means of its name this directory 
+is not recognized as an include directory (it is not named "include"), and none 
+of the files in here has an ending that is recognized as an rtl source file.
+The header files can be used as starting points for own designs, since they are 
+perfectly valid and (currently) complete axi register file parameterizations, 
+with the correct required file names. For that purpose, the recommended way is 
+copying the headers into the project's "include" directory, and editing them 
+there.  Please don't use symlinks, the files in this directory are meant to not 
+be touched.
+
+# XILINX IPS
+
+A block RAM IP is described, which acts as an AXI protocol checker for the 
+`axi4_master`. The testbench hooks it up to the BRAM's AXI interface, and tests 
+are done by a series of write and read backs. You need to integrate the IP 
+described there in the projects `xips` directory, add them to the vivado project 
+using the respective make targets, and from there the output products are 
+generated, exported and integrated into compilation for mcm-supported 
+simulators.
