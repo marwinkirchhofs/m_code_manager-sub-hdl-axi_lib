@@ -7,17 +7,14 @@ IPs being generated as per the `xips_user.tcl` script.
 # HEADERS
 
 The `.svh` files are example header files for configuring the axi-lite driven 
-`axi_lite_reg_file_*` register file modules. These headers are not meant to be 
-included in a project (in this location). This is taken care of in 
-m_code_manager-generated projects, because by means of its name this directory 
-is not recognized as an include directory (it is not named "include"), and none 
-of the files in here has an ending that is recognized as an rtl source file.
-The header files can be used as starting points for own designs, since they are 
-perfectly valid and (currently) complete axi register file parameterizations, 
-with the correct required file names. For that purpose, the recommended way is 
-copying the headers into the project's "include" directory, and editing them 
-there.  Please don't use symlinks, the files in this directory are meant to not 
-be touched.
+`axi_lite_reg_file_*` register file modules. The original form of these headers 
+is in the mcm_rtl_lib misc directory, alongside with how to use them. They are 
+here because the testbench for the axi_lite_reg_file_* cores relies on the 
+register file being parameterized as given by these headers.
+Keep in mind that in an m_code_manager-generated project, the headers still need 
+to be made accessible to the simulation tool, for example by copying them to the 
+project's 'include' directory (this directory is not regarded as any sort of 
+source directory by the tool flow).
 
 # XILINX IPS
 
