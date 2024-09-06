@@ -262,9 +262,7 @@ module axi4_master #(
     always_comb begin: fsm_status
         case (st_axi_master)
             ST_AXI_MASTER_IDLE: begin
-                if (i_trigger) begin
-                    st_axi_master_next = ST_AXI_MASTER_BUSY;
-                end
+                st_axi_master_next = i_trigger ? ST_AXI_MASTER_BUSY : ST_AXI_MASTER_IDLE;
             end
             ST_AXI_MASTER_BUSY: begin
                 // should be impossible here to immediately jump back to IDLE, 
@@ -273,7 +271,12 @@ module axi4_master #(
                 if (st_axi_master_addr == ST_AXI_MASTER_ADDR_IDLE &&
                     st_axi_master_data == ST_AXI_MASTER_DATA_IDLE) begin
                     st_axi_master_next = ST_AXI_MASTER_IDLE;
+                end else begin
+                    st_axi_master_next = ST_AXI_MASTER_BUSY;
                 end
+            end
+            default: begin
+                st_axi_master_next = ST_AXI_MASTER_IDLE;
             end
         endcase
     end
@@ -312,11 +315,11 @@ module axi4_master #(
     assign if_axi.arregion          = reg_axi_status_fields.region;
     assign if_axi.awuser            = reg_axi_user;
     assign if_axi.wuser             = reg_axi_user;
-    assign if_axi.buser             = reg_axi_user;
+//     assign if_axi.buser             = reg_axi_user;
     assign if_axi.aruser            = reg_axi_user;
     assign if_axi.awid              = reg_axi_id;
     assign if_axi.wid               = reg_axi_id;
-    assign if_axi.bid               = reg_axi_id;
+//     assign if_axi.bid               = reg_axi_id;
     assign if_axi.arid              = reg_axi_id;
     assign if_axi.awaddr            = axi_address;
     assign if_axi.araddr            = axi_address;
@@ -564,6 +567,10 @@ module axi4_master #(
 
                 end
 
+                default: begin
+                    st_axi_master_addr <= ST_AXI_MASTER_ADDR_IDLE;
+                end
+
             endcase
         end
     end
@@ -719,6 +726,10 @@ module axi4_master #(
                         end
                     endcase
                 end // ST_AXI_MASTER_DATA_RESP
+
+                default: begin
+                    st_axi_master_data <= ST_AXI_MASTER_DATA_IDLE;
+                end
 
             endcase
         end
