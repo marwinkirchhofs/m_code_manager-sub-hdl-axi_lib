@@ -66,6 +66,7 @@ package axi_lib_pkg;
 
     typedef enum {
         ST_AXI_LITE_READ_READY,
+        ST_AXI_LITE_READ_FETCH,
         ST_AXI_LITE_READ_VALID
     } st_axi_lite_read_addr_t;
 

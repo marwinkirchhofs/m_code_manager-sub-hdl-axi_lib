@@ -91,6 +91,9 @@ module axi4_lite_reg_slave #(
     st_axi_lite_read_addr_t                 st_read_addr;
     st_axi_lite_read_addr_t                 st_read_addr_next;
 
+    logic   [ADDR_WIDTH-1:0]                reg_read_addr;
+    logic                                   fetch_read_data;
+
     // AXI WRITE
     reg_file_item_t                         reg_file_item_write;
 
@@ -102,9 +105,10 @@ module axi4_lite_reg_slave #(
     // read channel can write-access it as well - namely when a register is set 
     // to be clear-on-write
     logic                                   reg_clear_req;
-    reg_id_t                                reg_clear_id;
+    reg_file_id_t                           reg_clear_id;
     logic                                   reg_write_req;
-    reg_id_t                                reg_write_id;
+    reg_file_id_t                           reg_write_id;
+    logic   [ADDR_WIDTH-1:0]                reg_write_addr;
     logic   [AXI_DATA_WIDTH-1:0]            reg_write_data;
 
     //----------------------------------------------------------
@@ -119,11 +123,13 @@ module axi4_lite_reg_slave #(
     // READ
     //----------------------------
 
-    assign reg_file_item_read = get_reg_item_from_addr(if_axi.araddr);
+//     assign reg_file_item_read = get_reg_item_from_axi_addr(if_axi.araddr, AXI_BASE_ADDR);
+    assign reg_file_item_read = get_reg_item_from_axi_addr(reg_read_addr, AXI_BASE_ADDR);
     
     // READ HANDSHAKES
     assign if_axi.arready   =   st_read_addr == ST_AXI_LITE_READ_READY;
     assign if_axi.rvalid    =   st_read_addr == ST_AXI_LITE_READ_VALID;
+    assign fetch_read_data  =   st_read_addr == ST_AXI_LITE_READ_FETCH;
 
     always_ff @(posedge clk)
     begin: fsm_read_addr_next
@@ -139,18 +145,40 @@ module axi4_lite_reg_slave #(
         case (st_read_addr)
             ST_AXI_LITE_READ_READY: begin
                 if (if_axi.arready & if_axi.arvalid) begin
-                    st_read_addr_next = ST_AXI_LITE_READ_VALID;
+                    st_read_addr_next = ST_AXI_LITE_READ_FETCH;
+                end else begin
+                    st_read_addr_next = ST_AXI_LITE_READ_READY;
                 end
+            end
+            ST_AXI_LITE_READ_FETCH: begin
+                // one intermediate cycle to fetch read data from the register 
+                // file (otherwise you have a full path from the read address to 
+                // the register file, on which you also need to resolve the 
+                // address into the correct register ID. Goodbye clock frequency)
+                st_read_addr_next = ST_AXI_LITE_READ_VALID;
             end
             ST_AXI_LITE_READ_VALID: begin
                 if (if_axi.rvalid & if_axi.rready) begin
                     st_read_addr_next = ST_AXI_LITE_READ_READY;
+                end else begin
+                    st_read_addr_next = ST_AXI_LITE_READ_VALID;
                 end
+            end
+            default: begin
+                st_read_addr_next = ST_AXI_LITE_READ_READY;
             end
         endcase
     end
 
     // READ OPERATION
+
+    // register address
+    always_ff @(posedge clk)
+    begin: proc_register_read_address
+        if (if_axi.arready & if_axi.arvalid) begin
+            reg_read_addr       <= if_axi.araddr;
+        end
+    end
 
     // fetch read data
     always_ff @(posedge clk)
@@ -168,23 +196,32 @@ module axi4_lite_reg_slave #(
 
             reg_clear_req                   <= 1'b0;
             reg_clear_id                    <= '0;
-            if_axi.rdata                    <= '0;
-            if_axi.rresp                    <= AXI4_RESP_SLVERR;
+            // attempt to keep those out of the CE path
+            if_axi.rdata                    <= if_axi.rdata;
+            if_axi.rresp                    <= if_axi.rresp;
 
-            if (if_axi.arready & if_axi.arvalid) begin
+//             if (if_axi.arready & if_axi.arvalid) begin
+            if (fetch_read_data) begin
+
                 // check for a valid address
                 if (reg_file_item_read.entry_found) begin
                     // TODO: mask data
 
                     // fetch data from the register file
-                    if_axi.rdata        <= if_reg_file.read_data[reg_file_item_read.id];
                     if_axi.rresp        <= AXI4_RESP_OKAY;
                     if (reg_file_item_read.entry.clear_on_read) begin
                         reg_clear_req       <= 1'b1;
                         reg_clear_id        <= reg_file_item_read.id;
                     end
                 end
+                // read data can be taken out of the address validity checking 
+                // path, because the axi data field doesn't matter if the slave 
+                // responds with an error
+                if_axi.rdata        <= if_reg_file.read_data[reg_file_item_read.id];
+            end else if (if_axi.rvalid & if_axi.rready) begin
+                if_axi.rresp        <= AXI4_RESP_SLVERR;
             end
+
         end
     end
 
@@ -192,7 +229,8 @@ module axi4_lite_reg_slave #(
     // WRITE
     //----------------------------
 
-    assign reg_file_item_write = get_reg_item_from_addr(if_axi.awaddr);
+//     assign reg_file_item_write = get_reg_item_from_axi_addr(if_axi.awaddr, AXI_BASE_ADDR);
+    assign reg_file_item_write = get_reg_item_from_axi_addr(reg_write_addr, AXI_BASE_ADDR);
 
     assign if_axi.awready   =   st_write_addr == ST_AXI_LITE_WRITE_READY;
     assign if_axi.wready    =   st_write_addr == ST_AXI_LITE_WRITE_VALID;
@@ -236,6 +274,14 @@ module axi4_lite_reg_slave #(
     end
 
     // WRITE OPERATION
+
+    // register address
+    always_ff @(posedge clk)
+    begin: proc_register_write_address
+        if (if_axi.awready & if_axi.awvalid) begin
+            reg_write_addr      <= if_axi.awaddr;
+        end
+    end
 
     always_ff @(posedge clk)
     begin: proc_write_operation
