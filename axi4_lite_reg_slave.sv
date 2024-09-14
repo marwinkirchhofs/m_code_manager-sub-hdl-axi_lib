@@ -256,6 +256,7 @@ module axi4_lite_reg_slave #(
     */
     always_comb
     begin: fsm_write_addr
+        st_write_addr_next = st_write_addr;
         case (st_write_addr)
             ST_AXI_LITE_WRITE_READY: begin
                 if (if_axi.awready & if_axi.awvalid) begin
@@ -271,6 +272,9 @@ module axi4_lite_reg_slave #(
                 if (if_axi.bvalid & if_axi.bready) begin
                     st_write_addr_next = ST_AXI_LITE_WRITE_READY;
                 end
+            end
+            default: begin
+                st_write_addr_next = ST_AXI_LITE_WRITE_READY;
             end
         endcase
     end
