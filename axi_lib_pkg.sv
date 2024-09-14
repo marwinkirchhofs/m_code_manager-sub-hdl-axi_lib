@@ -11,14 +11,14 @@ package axi_lib_pkg;
     // AXI4_BIT_* bit index in respective signal
     // AXI4_* - bit vector constant
     
-    parameter                   AXI4_BURST_FIXED        = 'b00;
-    parameter                   AXI4_BURST_INCR         = 'b01;
-    parameter                   AXI4_BURST_WRAP         = 'b10;
+    parameter                   AXI4_BURST_FIXED        = 2'b00;
+    parameter                   AXI4_BURST_INCR         = 2'b01;
+    parameter                   AXI4_BURST_WRAP         = 2'b10;
 
-    parameter                   AXI4_RESP_OKAY          = 'b00;
-    parameter                   AXI4_RESP_EXOKAY        = 'b01;
-    parameter                   AXI4_RESP_SLVERR        = 'b10;
-    parameter                   AXI4_RESP_DECERR        = 'b11;
+    parameter                   AXI4_RESP_OKAY          = 2'b00;
+    parameter                   AXI4_RESP_EXOKAY        = 2'b01;
+    parameter                   AXI4_RESP_SLVERR        = 2'b10;
+    parameter                   AXI4_RESP_DECERR        = 2'b11;
 
     parameter                   AXI4_BIT_CACHE_BUFFER   = 0;
     parameter                   AXI4_BIT_CACHE_MODIFY   = 1;    // CACHE IN AXI3
@@ -98,7 +98,7 @@ package axi_lib_pkg;
         logic [1:0]             burst_type;
         logic [3:0]             cache;
         logic [2:0]             prot;
-        logic [2:0]             qos;
+        logic [3:0]             qos;
         logic [3:0]             region;
         logic                   lock;
     } axi4_status_fields_t;
@@ -114,7 +114,7 @@ package axi_lib_pkg;
         AXI4_DEFAULT_CACHE,     // cache
         3'b0,                   // prot
         4'b0,                   // qos
-        3'b0,                   // region
+        4'b0,                   // region
         AXI4_DEFAULT_LOCK       // lock
     };
 
