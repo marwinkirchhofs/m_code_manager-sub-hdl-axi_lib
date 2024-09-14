@@ -4,9 +4,7 @@ interface ifc_axi4 #(
     parameter int ADDR_WIDTH = 32,
     parameter int DATA_WIDTH = 32,
     parameter int ID_WIDTH = 0,
-    parameter int USER_WIDTH = 0,
-    parameter real T_SETUP = 1,
-    parameter real T_CTOQ = 2
+    parameter int USER_WIDTH = 0
 ) (
     input clk,
     input rst_n
