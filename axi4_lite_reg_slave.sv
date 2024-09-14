@@ -27,6 +27,13 @@
 * about if also in some way you want to define other "illegal" writes, which 
 * should result in a slave error. Anyways, if you follow your own register 
 * mapping table, it isn't a problem.
+*
+* TODO: find a better structure for the parameterization headers, such that the 
+* base address also gets set set there. And, for pure theory, think about how 
+* a user could specify multiple register files through that package. It might be 
+* an idea to just shift the entire axi parameterization to headers, include axi 
+* bus address width. It would allow to again have any function in the package, 
+    * instead of in the module.
 */
 
 import axi_lib_pkg::*;
@@ -35,6 +42,7 @@ import reg_file_pkg::*;
 module axi4_lite_reg_slave #(
     parameter                           ADDR_WIDTH              = 32,
     parameter                           AXI_DATA_WIDTH          = 32,
+    parameter                           AXI_BASE_ADDR           = '0,
     parameter                           REGISTER_WIDTH          = 32,
     parameter                           NUM_REGISTERS           = 16,
     parameter                           SAME_CYCLE_ADDR_DATA    = 1
@@ -46,6 +54,32 @@ module axi4_lite_reg_slave #(
     ifc_reg_file_direct_access.master       if_reg_file,
     output logic    [NUM_REGISTERS-1:0]     o_write_trigger
 );
+
+    typedef logic [ADDR_WIDTH-1:0] axi_addr_t;
+    /*
+    * be aware: the function does synthesize, but as expected, it can introduce 
+    * a considerable timing problem. You are comparing a 32-bit register against 
+    * a good number of values using LUTs. Already for only 3 integers in the map 
+    * table, that gives 3 hierarchy levels of LUTs for the CE port. Might get 
+* worse with a larger number of choices. Good thing is there is no fanout...
+    */
+    function automatic reg_file_item_t get_reg_item_from_axi_addr(
+        axi_addr_t axi_addr,
+        axi_addr_t base_address = '0
+    );
+        reg_file_item_t          hit;
+        hit.entry_found = 1'b0;
+
+        for (int i=0; i<REG_FILE_NUM_REGISTERS; i++) begin
+            if (axi_addr_t'(AXI_LITE_REG_MAP_TABLE[i].addr) == (axi_addr - base_address)) begin
+                hit.entry_found = 1'b1;
+                hit.id = reg_file_id_t'(i);
+                hit.entry = AXI_LITE_REG_MAP_TABLE[i];
+            end
+        end
+
+        return hit;
+    endfunction
 
     //----------------------------------------------------------
     // INTERNAL SIGNALS
