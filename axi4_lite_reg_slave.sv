@@ -188,6 +188,8 @@ module axi4_lite_reg_slave #(
             // added to allow consistency in control sets help with placement.
             reg_clear_req                   <= 1'b0;
             reg_clear_id                    <= '0;
+            // (reset wouldn't be necessary for the axi read data field, but it 
+            // turned out to help with timing in experiments)
             if_axi.rdata                    <= '0;
             // signalize an error on the slave when not in a transaction 
             // completion cycle
@@ -299,22 +301,22 @@ module axi4_lite_reg_slave #(
             reg_write_req                   <= 1'b0;
             o_write_trigger                 <= '0;
 
-            if (if_axi.awready & if_axi.awvalid) begin
+//             if (if_axi.awready & if_axi.awvalid) begin
+            if (if_axi.wready & if_axi.wvalid) begin
                 // check for a valid address
                 if (reg_file_item_write.entry_found) begin
                     // TODO: apply wstrb
 
                     // TODO: mask data
                     if (reg_file_item_write.entry.memory_mapped) begin
-                        reg_write_data      <= if_axi.wdata;
                         reg_write_id        <= reg_file_item_write.id;
                         reg_write_req       <= 1'b1;
                     end
                     if (reg_file_item_write.entry.trigger_on_write) begin
                         o_write_trigger[reg_file_item_write.id] <= 1'b1;
                     end
-
                 end
+                reg_write_data      <= if_axi.wdata;
             end
         end
     end
