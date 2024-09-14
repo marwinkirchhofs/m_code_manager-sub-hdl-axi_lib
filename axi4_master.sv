@@ -143,25 +143,31 @@ module axi4_master #(
         // because otherwise you can't assign burst items to the axi data bus 
         // without splitting them up, but the user can take over the splitting 
         // up part, the axi bus is wide enough
-        if (USER_DATA_WIDTH > AXI_DATA_WIDTH)
+        if (USER_DATA_WIDTH > AXI_DATA_WIDTH) begin: gen_check_user_data_width
             $error($sformatf(
                 "USER_DATA_WIDTH (%0d) can not be larger than AXI_DATA_WIDTH (%0d)",
                 USER_DATA_WIDTH, AXI_DATA_WIDTH));
+        end
 
         // MAX_TOTAL_TRANSACTION_LENGTH >= 2
         // because 1. this is a burst-only parameter, so 1 doesn't make sense 
         // since you could just go FIXED, 2. it causes problems in the code with 
         // slicing if $clog2(MAX_TOTAL_TRANSACTION_LENGTH)<1, and this 
         // requirement prevents that without actually restricting anything
-        if (MAX_TOTAL_TRANSACTION_LENGTH < 2)
+        if (MAX_TOTAL_TRANSACTION_LENGTH < 2) begin: gen_check_small_transaction_length
             $error($sformatf(
                 "MAX_TOTAL_TRANSACTION_LENGTH (%0d) must be >= 2",
                 MAX_TOTAL_TRANSACTION_LENGTH));
+        end
         
         if (~(AXI_DATA_WIDTH inside {8, 16, 32, 64, 128, 256, 512, 1024}))
+        begin: gen_check_axi_data_width_range
             $error($sformatf("Invalid (non-power of 2) AXI_DATA_WIDTH (%0d)", AXI_DATA_WIDTH));
+        end
         if (~(USER_DATA_WIDTH inside {8, 16, 32, 64, 128, 256, 512, 1024}))
+        begin: gen_check_user_data_width_range
             $error($sformatf("Invalid (non-power of 2) USER_DATA_WIDTH (%0d)", USER_DATA_WIDTH));
+        end
     end
     endgenerate
 
