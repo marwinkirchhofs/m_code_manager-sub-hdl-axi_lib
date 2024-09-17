@@ -45,7 +45,12 @@ module axi4_lite_reg_slave #(
     parameter                           AXI_BASE_ADDR           = '0,
     parameter                           REGISTER_WIDTH          = 32,
     parameter                           NUM_REGISTERS           = 16,
-    parameter                           SAME_CYCLE_ADDR_DATA    = 1
+    // delay reading from the register file for timing optimization. Is 
+    // implemented as a parallel wait, not as a pipeline, such that the data 
+    // path from register file to axi can be made multi-cycle if READ_LATENCY>1
+    // (note that the core has a read latency of 2 anyways (register address, 
+    // fetch data), the parameter just sets the additional latency)
+    parameter                           ADD_READ_LATENCY        = 0
 ) (
     input                                   clk,
     input                                   rst_n,
@@ -93,6 +98,7 @@ module axi4_lite_reg_slave #(
 
     logic   [ADDR_WIDTH-1:0]                reg_read_addr;
     logic                                   fetch_read_data;
+    logic   [$clog2(ADD_READ_LATENCY+1)-1:0]    count_wait_fetch_read_data;
 
     // AXI WRITE
     reg_file_item_t                         reg_file_item_write;
@@ -123,14 +129,12 @@ module axi4_lite_reg_slave #(
     // READ
     //----------------------------
 
-//     assign reg_file_item_read = get_reg_item_from_axi_addr(if_axi.araddr, AXI_BASE_ADDR);
     assign reg_file_item_read = get_reg_item_from_axi_addr(reg_read_addr, AXI_BASE_ADDR);
     
     // READ HANDSHAKES
     assign if_axi.arready   =   st_read_addr == ST_AXI_LITE_READ_READY;
     assign if_axi.rvalid    =   st_read_addr == ST_AXI_LITE_READ_VALID;
-    assign fetch_read_data  =   st_read_addr == ST_AXI_LITE_READ_FETCH;
-
+ 
     always_ff @(posedge clk)
     begin: fsm_read_addr_next
         if (~rst_n) begin
@@ -156,7 +160,11 @@ module axi4_lite_reg_slave #(
                 // file (otherwise you have a full path from the read address to 
                 // the register file, on which you also need to resolve the 
                 // address into the correct register ID. Goodbye clock frequency)
-                st_read_addr_next = ST_AXI_LITE_READ_VALID;
+                if (count_wait_fetch_read_data == '0) begin
+                    st_read_addr_next = ST_AXI_LITE_READ_VALID;
+                end else begin
+                    st_read_addr_next = st_read_addr;
+                end
             end
             ST_AXI_LITE_READ_VALID: begin
 //                 if (if_axi.rvalid & if_axi.rready) begin
@@ -172,13 +180,33 @@ module axi4_lite_reg_slave #(
         endcase
     end
 
+    // READ FETCH
+    generate begin: gen_read_fetch_count
+        if (ADD_READ_LATENCY>0) begin
+            always_ff @(posedge clk) begin
+                if (fetch_read_data) begin
+                    count_wait_fetch_read_data <= ADD_READ_LATENCY;
+                end else begin
+                    count_wait_fetch_read_data <= count_wait_fetch_read_data - 1;
+                end
+            end
+        end else begin
+            assign count_wait_fetch_read_data = '0;
+        end
+    end endgenerate
+
     // READ OPERATION
 
     // register address
     always_ff @(posedge clk)
     begin: proc_register_read_address
+        fetch_read_data <= 1'b0;
         if (if_axi.hs_ar()) begin
             reg_read_addr       <= if_axi.araddr;
+
+            if (st_read_addr == ST_AXI_LITE_READ_READY) begin
+                fetch_read_data <= 1'b1;
+            end
         end
     end
 

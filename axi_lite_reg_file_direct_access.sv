@@ -20,7 +20,8 @@ module axi_lite_reg_file_direct_access #(
     parameter                           AXI_DATA_WIDTH          = 32,
     parameter                           AXI_BASE_ADDR           = '0,
     parameter                           REGISTER_WIDTH          = 32,
-    parameter                           NUM_REGISTERS           = 16
+    parameter                           NUM_REGISTERS           = 16,
+    parameter                           ADD_READ_LATENCY        = 0
 ) (
     input                                   clk,
     input                                   rst_n,
@@ -82,7 +83,8 @@ module axi_lite_reg_file_direct_access #(
         .AXI_DATA_WIDTH                 (AXI_DATA_WIDTH),
         .AXI_BASE_ADDR                  (AXI_BASE_ADDR),
         .REGISTER_WIDTH                 (REGISTER_WIDTH),
-        .NUM_REGISTERS                  (NUM_REGISTERS)
+        .NUM_REGISTERS                  (NUM_REGISTERS),
+        .ADD_READ_LATENCY               (ADD_READ_LATENCY)
     ) inst_axi4_lite_reg_slave (
         .clk                            (clk),
         .rst_n                          (rst_n),
