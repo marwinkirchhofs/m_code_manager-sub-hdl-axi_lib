@@ -1,6 +1,11 @@
 interface ifc_axi_lite_reg_file_direct_access #(
     parameter               REGISTER_WIDTH = 32,
-    parameter               NUM_REGISTERS = 16
+    parameter               NUM_REGISTERS = 16,
+    parameter               AXI_ADDR_WIDTH = 32,
+    parameter               AXI_ID_WIDTH = 0,
+    parameter               AXI_USER_WIDTH = 0,
+    parameter real          T_SETUP = 1,
+    parameter real          T_CTOQ = 2
 ) (
     input clk,
     input rst_n
@@ -14,7 +19,14 @@ interface ifc_axi_lite_reg_file_direct_access #(
     // potential inconsistencies with the clocking block in the axi sim 
     // interface, if the signals are assigned to and from the axi ctrl interface 
     // at specific points in time.
-    ifc_axi4                        if_axi_sim (clk, rst_n);
+    ifc_axi4_sim                    #(
+    .ADDR_WIDTH                 (AXI_ADDR_WIDTH),
+    .DATA_WIDTH                 (REGISTER_WIDTH),
+    .ID_WIDTH                   (AXI_ID_WIDTH),
+    .USER_WIDTH                 (AXI_USER_WIDTH),
+    .T_SETUP                    (T_SETUP),
+    .T_CTOQ                     (T_CTOQ)
+    ) if_axi_sim (clk, rst_n);
 //     ifc_axi4_lite                   if_axi_ctrl (clk, rst_n);
     ifc_reg_file_direct_access      #(
         .REGISTER_WIDTH         (REGISTER_WIDTH),

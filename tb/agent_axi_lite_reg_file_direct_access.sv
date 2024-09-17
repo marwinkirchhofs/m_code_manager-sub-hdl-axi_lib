@@ -19,7 +19,12 @@ package axi_lite_reg_file_direct_access_sim_pkg;
 
     class cls_agent_axi_lite_reg_file_direct_access #(
         parameter       REGISTER_WIDTH = 32,
-        parameter       NUM_REGISTERS = 16
+        parameter       NUM_REGISTERS = 16,
+        parameter       AXI_ADDR_WIDTH = 32,
+        parameter       AXI_ID_WIDTH = 0,
+        parameter       AXI_USER_WIDTH = 0,
+        parameter real  T_SETUP = 1,
+        parameter real  T_CTOQ = 2
         );
 
         /*
@@ -29,7 +34,12 @@ package axi_lite_reg_file_direct_access_sim_pkg;
 
         virtual ifc_axi_lite_reg_file_direct_access #(
             .REGISTER_WIDTH             (REGISTER_WIDTH),
-            .NUM_REGISTERS              (NUM_REGISTERS)
+            .NUM_REGISTERS              (NUM_REGISTERS),
+            .AXI_ADDR_WIDTH             (AXI_ADDR_WIDTH),
+            .AXI_ID_WIDTH               (AXI_ID_WIDTH),
+            .AXI_USER_WIDTH             (AXI_USER_WIDTH),
+            .T_SETUP                    (T_SETUP),
+            .T_CTOQ                     (T_CTOQ)
         ) if_axi_lite_reg_file_direct_access;
 
         cls_axi_traffic_gen_sim atg;
@@ -38,8 +48,13 @@ package axi_lite_reg_file_direct_access_sim_pkg;
 
         function new(
             virtual ifc_axi_lite_reg_file_direct_access #(
-                .REGISTER_WIDTH (REGISTER_WIDTH),
-                .NUM_REGISTERS  (NUM_REGISTERS)
+                .REGISTER_WIDTH             (REGISTER_WIDTH),
+                .NUM_REGISTERS              (NUM_REGISTERS),
+                .AXI_ADDR_WIDTH             (AXI_ADDR_WIDTH),
+                .AXI_ID_WIDTH               (AXI_ID_WIDTH),
+                .AXI_USER_WIDTH             (AXI_USER_WIDTH),
+                .T_SETUP                    (T_SETUP),
+                .T_CTOQ                     (T_CTOQ)
             ) if_axi_lite_reg_file_direct_access
         );
             this.if_axi_lite_reg_file_direct_access = if_axi_lite_reg_file_direct_access;
@@ -133,6 +148,11 @@ package axi_lite_reg_file_direct_access_sim_pkg;
             logic axi_done = 0;
             logic trigger_asserted = 0;
 
+            // no idea yet if that is supposed to be a constant variable, a test 
+            // argument or a parameter (but most likely not a constant variable, 
+            // tbh...)
+            const int base_address = 'h20;
+
             // TODO: hardcoded
             logic [7:0] address;
 
@@ -158,7 +178,7 @@ package axi_lite_reg_file_direct_access_sim_pkg;
             // write is hard-wired to the first register)
             $display("\tsimultaneous write hw and axi");
             write_data = 6;
-            address = 8'h00;
+            address = base_address + 8'h00;
             fork
             begin
                 wait_cycles_ev(this.ev_clk, 2);
@@ -194,7 +214,7 @@ package axi_lite_reg_file_direct_access_sim_pkg;
             trigger_asserted = 1'b0;
             axi_done = 1'b0;
             write_data = 4;
-            address = 8'h10;
+            address = base_address + 8'h10;
             // why do we need forking for checking the trigger? The trigger 
             // happens right at the write, thus while thewrite task is still 
             // executing. So if we just look at the trigger after the task is 
@@ -234,7 +254,7 @@ package axi_lite_reg_file_direct_access_sim_pkg;
             // address table
             $display("\twrite axi non-mapped address");
             write_data = 21;
-            address = 8'h20;
+            address = base_address + 8'h20;
             this.write("axi", write_data, address);
             // TODO: in theory, for testing that, you would have to register and 
             // then compary the entire register file interface
@@ -245,7 +265,7 @@ package axi_lite_reg_file_direct_access_sim_pkg;
             wait_cycles_ev(this.ev_clk, 2);
 
             $display("\tread axi non-mapped address");
-            address = 8'h20;
+            address = base_address + 8'h20;
             this.read("axi", read_data, address);
             if (read_data == 32'b0)
                 passed++;
@@ -257,7 +277,7 @@ package axi_lite_reg_file_direct_access_sim_pkg;
 
             $display("\twrite axi memory mappend and trigger on write");
             write_data = 42;
-            address = 8'h14;
+            address = base_address + 8'h14;
             axi_done = 1'b0;
             trigger_asserted = 1'b0;
             fork begin  // guarding fork for `disable fork`
