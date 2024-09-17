@@ -71,9 +71,7 @@ ifc_axi4 #(
     .ADDR_WIDTH         (AXI_ADDR_WIDTH),
     .DATA_WIDTH         (AXI_DATA_WIDTH),
     .ID_WIDTH           (AXI_ID_WIDTH),
-    .USER_WIDTH         (AXI_USER_WIDTH),
-    .T_SETUP            (T_SETUP),
-    .T_CTOQ             (T_CTOQ)
+    .USER_WIDTH         (AXI_USER_WIDTH)
 ) if_axi [NUM_PARAMETERIZATIONS] (clk, if_rst.rst);
 
 // why are the read and write interface not embedded into ifc_axi4_master?  
