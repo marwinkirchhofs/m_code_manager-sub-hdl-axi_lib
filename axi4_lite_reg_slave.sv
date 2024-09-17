@@ -144,7 +144,8 @@ module axi4_lite_reg_slave #(
     begin: fsm_read_addr
         case (st_read_addr)
             ST_AXI_LITE_READ_READY: begin
-                if (if_axi.arready & if_axi.arvalid) begin
+//                 if (if_axi.arready & if_axi.arvalid) begin
+                if (if_axi.hs_ar()) begin
                     st_read_addr_next = ST_AXI_LITE_READ_FETCH;
                 end else begin
                     st_read_addr_next = ST_AXI_LITE_READ_READY;
@@ -158,7 +159,8 @@ module axi4_lite_reg_slave #(
                 st_read_addr_next = ST_AXI_LITE_READ_VALID;
             end
             ST_AXI_LITE_READ_VALID: begin
-                if (if_axi.rvalid & if_axi.rready) begin
+//                 if (if_axi.rvalid & if_axi.rready) begin
+                if (if_axi.hs_r()) begin
                     st_read_addr_next = ST_AXI_LITE_READ_READY;
                 end else begin
                     st_read_addr_next = ST_AXI_LITE_READ_VALID;
@@ -175,7 +177,7 @@ module axi4_lite_reg_slave #(
     // register address
     always_ff @(posedge clk)
     begin: proc_register_read_address
-        if (if_axi.arready & if_axi.arvalid) begin
+        if (if_axi.hs_ar()) begin
             reg_read_addr       <= if_axi.araddr;
         end
     end

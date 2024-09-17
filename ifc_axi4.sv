@@ -67,6 +67,19 @@ interface ifc_axi4 #(
     logic                           rvalid;
     logic                           rready;
 
+    function hs_ar();
+        return arready & arvalid;
+    endfunction
+    function hs_r();
+        return rready & rvalid;
+    endfunction
+    function hs_aw();
+        return awready & awvalid;
+    endfunction
+    function hs_w();
+        return wready & wvalid;
+    endfunction
+
     modport master (
         // WRITE ADDRESS CHANNEL
         output awid, awaddr, awlen, awsize, awburst, awlock, awcache, awprot,

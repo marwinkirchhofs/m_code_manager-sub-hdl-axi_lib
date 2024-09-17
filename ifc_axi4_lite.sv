@@ -44,6 +44,19 @@ interface ifc_axi4_lite #(
     logic                           rvalid;
     logic                           rready;
 
+    function hs_ar();
+        return arready & arvalid;
+    endfunction
+    function hs_r();
+        return rready & rvalid;
+    endfunction
+    function hs_aw();
+        return awready & awvalid;
+    endfunction
+    function hs_w();
+        return wready & wvalid;
+    endfunction
+
 //     clocking cb @(posedge clk);
 //         default input #T_SETUP output #T_CTOQ;
 //         // WRITE ADDRESS CHANNEL
@@ -87,6 +100,7 @@ interface ifc_axi4_lite #(
         );
 
     modport master (
+        import hs_r, hs_ar, hs_w, hs_aw,
         // WRITE ADDRESS CHANNEL
         output awaddr, awprot,
         output awvalid,
@@ -107,6 +121,7 @@ interface ifc_axi4_lite #(
         );
 
     modport slave (
+        import hs_r, hs_ar, hs_w, hs_aw,
         // WRITE ADDRESS CHANNEL
         input awaddr, awprot,
         input awvalid,
