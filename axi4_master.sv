@@ -486,7 +486,7 @@ module axi4_master #(
         endcase
     end
 
-    assign axi_addr_valid   =   st_axi_master_addr == ST_AXI_MASTER_BUSY;
+    assign axi_addr_valid   =   st_axi_master_addr == ST_AXI_MASTER_ADDR_BUSY;
 
     always_ff @(posedge clk) begin: fsm_axi_addr_burst
         if (~rst_n) begin
