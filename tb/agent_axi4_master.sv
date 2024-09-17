@@ -150,6 +150,90 @@ package axi4_master_sim_pkg;
         endtask
 
         /*
+        * - test for blocking user data stream in between of two transmissions -
+        * write and read back a set of data in two bursts, but continuously push 
+        * data into the core (keep the write valid assigned). What it tests: The 
+        * core had the issue of accepting a data word from hardware into the 
+        * input registers while writing the last burst item of a transition to 
+        * axi. The user write data ready signal needs to be deasserted in time 
+        * to block that first word of the following transmission, because you 
+        * don't know the address and burst type yet, so you can not properly 
+        * assign the data word to byte lanes yet (which happens at input 
+        * registering, not when actually writing to axi).
+        */
+        task test_continuous_user_stream(
+            logic [AXI_ADDR_WIDTH-1:0] address,
+            int num_data_words);
+
+            string                          test_name = "test_continuous_user_stream";
+            bit                             test_passed;
+
+            cls_test_data                   data_write;
+            bit     [USER_DATA_WIDTH-1:0]   data_write_packed [];
+            cls_test_data                   data_read;
+            bit     [USER_DATA_WIDTH-1:0]   read_item_packed;
+            logic   [STRB_WIDTH-1:0]        read_data_strb;
+
+            int                             num_words_write [2] = '{0, 0};
+            int                             num_words_read [2] = '{0, 0};
+
+            data_write = new(num_data_words, USER_DATA_WIDTH, 1);
+
+            case (USER_DATA_WIDTH)
+                32: begin
+//                     data_write.pack32(data_write_packed);
+                end
+                8: begin
+                    data_write.pack8(data_write_packed);
+                end
+                default: begin
+                    $error($sformatf("Unsupported USER_DATA_WIDTH: %0d", USER_DATA_WIDTH));
+                end
+            endcase
+            data_read = new(num_data_words, USER_DATA_WIDTH);   // TODO
+
+            @(posedge if_axi4_master.cb);
+
+            // WRITE
+
+            num_words_write[0] = (num_data_words>>1);
+            num_words_write[1] = num_data_words - num_words_write[0];
+
+            wait(if_axi4_master.cb.ready);
+            if_axi4_master.cb.axi_status_fields.burst_type <= AXI4_BURST_INCR;
+            if_axi4_master.cb.direction <= AXI4_DIR_WRITE;
+            if_axi4_master.cb.base_address <= address;
+            if_axi4_master.cb.axi_user <= '0;
+            if_axi4_master.cb.axi_id <= '0;
+            if_axi4_master.cb.clear_messages <= 1'b0;
+
+            fork
+            begin
+                foreach(num_words_write[i]) begin
+                    wait(if_axi4_master.cb.ready);
+                    if_axi4_master.cb.trigger <= 1'b1;
+                    if_axi4_master.cb.num_data_words <= num_words_write[i];
+                    @(posedge if_axi4_master.cb);
+                    if_axi4_master.cb.trigger <= 1'b0;
+                    @(posedge if_axi4_master.cb);
+                end
+            end
+            begin
+                foreach (data_write_packed[i]) begin
+                    if (`VERBOSITY >= VERBOSITY_PROTOCOL) begin
+                        $display(
+                            "[%0t] writing data beat %0d: %0x",
+                            $time, i, data_write_packed[i]);
+                    end
+                    this.write_item(data_write_packed[i], {(USER_DATA_WIDTH/8){1'b1}});
+                end
+            end
+            join
+
+        endtask // test_continuous_user_stream
+
+
+        /*
         * generate a set of randomized data items of USER_DATA_WIDTH, write them 
         * in an incr burst beginning at address, and read them back in two 
         * chunks of half the total transfer size. Then check write and read data 
