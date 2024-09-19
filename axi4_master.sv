@@ -377,6 +377,7 @@ module axi4_master #(
         // instead of a signal, or because if the target is an interface (or 
         // I overlook a reason).
         assign if_data_stream_write.ready = (data_busy && (count_burst_items != '0)) ?
+                (reg_direction == AXI4_DIR_WRITE) &&
                 (~write_reg_valid | (if_axi.wvalid & if_axi.wready)) : 1'b0;
         // because of previous tool problem, doing the other signals as 
         // assignments as well (instead of always_comb)
