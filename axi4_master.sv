@@ -376,9 +376,22 @@ module axi4_master #(
         // latch. Don't know if it is because it's testing for an expression 
         // instead of a signal, or because if the target is an interface (or 
         // I overlook a reason).
-        assign if_data_stream_write.ready = (data_busy && (count_burst_items != '0)) ?
-                (reg_direction == AXI4_DIR_WRITE) &&
-                (~write_reg_valid | (if_axi.wvalid & if_axi.wready)) : 1'b0;
+        // TODO try: only check for the hs as well while you're not at the last 
+        // burst item. Last burst item only fill the data register if it's empty, 
+        // and after the axi handshake data_busy deasserts anyways.
+        always_comb begin
+            if_data_stream_write.ready = 1'b0;
+            if (data_busy && (reg_direction == AXI4_DIR_WRITE)) begin
+                if (count_burst_items != '0) begin
+                    if_data_stream_write.ready = ~write_reg_valid | (if_axi.wvalid & if_axi.wready);
+                end else begin
+                    if_data_stream_write.ready = ~write_reg_valid;
+                end
+            end
+        end
+//         assign if_data_stream_write.ready = (data_busy && (count_burst_items != '0)) ?
+//                 (reg_direction == AXI4_DIR_WRITE) &&
+//                 (~write_reg_valid | (if_axi.wvalid & if_axi.wready)) : 1'b0;
         // because of previous tool problem, doing the other signals as 
         // assignments as well (instead of always_comb)
         assign if_axi.wvalid = data_busy ? write_reg_valid : 1'b0;
