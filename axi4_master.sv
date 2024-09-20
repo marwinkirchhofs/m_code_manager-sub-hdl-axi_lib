@@ -637,12 +637,38 @@ module axi4_master #(
         end else begin
             if (core_triggered) begin
                 burst_item_start_lane   <= i_base_address[$clog2(AXI_DATA_BYTES)-1:0];
+//                 // TODO: if the path from base address AND burst type to start 
+//                 // lane becomes a timing problem, we'll need an extra cycle to 
+//                 // REALLY first only register, and then do any interpretation 
+//                 // (such as determining burst_item_start_lane)
+//                 case (i_axi_status_fields.burst_type)
+//                     AXI4_BURST_FIXED: begin
+//                         burst_item_start_lane   <= '0;
+//                     end
+//                     AXI4_BURST_INCR: begin
+//                         burst_item_start_lane   <= i_base_address[$clog2(AXI_DATA_BYTES)-1:0];
+//                     end
+//                     default: begin
+//                         // TODO: add the AXI4_BURST_WRAP case, once that is 
+//                         // implemented
+//                         burst_item_start_lane   <= '0;
+//                     end
+//                 endcase
             end else if (in_data_handshake) begin
                 // if the user set address etc correctly, this automatically 
                 // wraps around the way it should by means of the data width of 
                 // burst_item_start_lane.
-                burst_item_start_lane <= 
-                        burst_item_start_lane + (1<<reg_axi_status_fields.burst_size);
+                case (reg_axi_status_fields.burst_type)
+                    AXI4_BURST_INCR: begin
+                        burst_item_start_lane <= 
+                                burst_item_start_lane + (1<<reg_axi_status_fields.burst_size);
+                    end
+                    default: begin
+                        // TODO: add the AXI4_BURST_WRAP case, once that is 
+                        // implemented
+                        burst_item_start_lane   <= burst_item_start_lane;
+                    end
+                endcase
             end
         end
     end
