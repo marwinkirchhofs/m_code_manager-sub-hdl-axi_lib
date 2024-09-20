@@ -417,8 +417,10 @@ module axi4_master #(
                     write_reg_valid             <= 1'b1;
                     if_axi.wdata                <= 
                             if_data_stream_write.data<<burst_item_start_bit;
+//                     if_axi.wstrb                <=
+//                             if_data_stream_write.strb<<burst_item_start_lane;
                     if_axi.wstrb                <=
-                            if_data_stream_write.strb<<burst_item_start_lane;
+                        ((1<<(1<<reg_axi_status_fields.burst_size))-1)<<burst_item_start_lane;
                 end else if (if_axi.wvalid & if_axi.wready) begin
                     write_reg_valid             <= 1'b0;
                 end
@@ -439,7 +441,9 @@ module axi4_master #(
                 1: begin
                     if_axi.wdata                = if_data_stream_write.data<<burst_item_start_bit;
                     if_axi.wvalid               = if_data_stream_write.valid;
-                    if_axi.wstrb                = if_data_stream_write.strb<<burst_item_start_lane;
+//                     if_axi.wstrb                = if_data_stream_write.strb<<burst_item_start_lane;
+                    if_axi.wstrb                =
+                        ((1<<(1<<reg_axi_status_fields.burst_size))-1)<<burst_item_start_lane;
                     if_data_stream_write.ready  = if_axi.wready;
                     if_data_stream_read.data    = if_axi.rdata>>burst_item_start_bit;
                     if_data_stream_read.valid   = if_axi.rvalid;
