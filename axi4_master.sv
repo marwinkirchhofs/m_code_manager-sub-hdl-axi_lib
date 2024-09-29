@@ -68,14 +68,6 @@
 * registered in o_msgs, should the parent want to look at that. The core aborts 
 * at a non-okay response.
 * 
-* if it really gets timing-critical, it might be an idea to use shift register 
-* counters instead of normal ones (parameter-enabled).  Needs a bit more time to 
-* set up/for the core to be ready for the next operation, but is way easier in 
-* implementation. And the "operation recover" time could be almost completely 
-* hidden with redundant counters - one counts, the other one empties. Still 
-* might perform poorly with non-constant transaction length, when you actually 
-* need to set up the counters upon a trigger.
-*
 * bresp: currently, the core is designed to always take at least one cycle for 
 * the write response. I don't know for sure if that is required by the protocol, 
 * I'll test that. However, it does help with timing closure...
@@ -321,11 +313,9 @@ module axi4_master #(
     assign if_axi.arregion          = reg_axi_status_fields.region;
     assign if_axi.awuser            = reg_axi_user;
     assign if_axi.wuser             = reg_axi_user;
-//     assign if_axi.buser             = reg_axi_user;
     assign if_axi.aruser            = reg_axi_user;
     assign if_axi.awid              = reg_axi_id;
     assign if_axi.wid               = reg_axi_id;
-//     assign if_axi.bid               = reg_axi_id;
     assign if_axi.arid              = reg_axi_id;
     assign if_axi.awaddr            = axi_address;
     assign if_axi.araddr            = axi_address;
@@ -370,15 +360,12 @@ module axi4_master #(
         // - In all other cases, the receiver holds valid data that still 
         // needs to be there next cycle, so don't advance
 
-        // tool problem: turns out that the only thing here that questa doesn't 
+        // tool problem: multiple times the only thing here that questa doesn't 
         // interpret as a latch is an assignment. Tried with case statement,  
         // with "if-uncond. else", and with "standard case + if", all the same 
-        // latch. Don't know if it is because it's testing for an expression 
+        // latch.  Don't know if it is because it's testing for an expression 
         // instead of a signal, or because if the target is an interface (or 
         // I overlook a reason).
-        // TODO try: only check for the hs as well while you're not at the last 
-        // burst item. Last burst item only fill the data register if it's empty, 
-        // and after the axi handshake data_busy deasserts anyways.
         always_comb begin
             if_data_stream_write.ready = 1'b0;
             if (data_busy && (reg_direction == AXI4_DIR_WRITE)) begin
@@ -389,11 +376,6 @@ module axi4_master #(
                 end
             end
         end
-//         assign if_data_stream_write.ready = (data_busy && (count_burst_items != '0)) ?
-//                 (reg_direction == AXI4_DIR_WRITE) &&
-//                 (~write_reg_valid | (if_axi.wvalid & if_axi.wready)) : 1'b0;
-        // because of previous tool problem, doing the other signals as 
-        // assignments as well (instead of always_comb)
         assign if_axi.wvalid = data_busy ? write_reg_valid : 1'b0;
         assign if_axi.rready = data_busy ?
                 (   ~if_data_stream_read.valid |
@@ -404,21 +386,12 @@ module axi4_master #(
             if (~rst_n) begin
                 write_reg_valid         <= 1'b0;
                 read_reg_valid          <= 1'b0;
-                // the axi and data stream fields shouldn't need resets. It 
-                // might help with control sets, find it hard to estimate if 
-                // implementation is better with or without.
             end else begin
-                // it shouldn't be necessary to check for the operation state 
-                // here, because the previous comb shuts off all the ready 
-                // signals while the core is not transmitting.
-
                 // write channel
                 if (if_data_stream_write.ready & if_data_stream_write.valid) begin
                     write_reg_valid             <= 1'b1;
                     if_axi.wdata                <= 
                             if_data_stream_write.data<<burst_item_start_bit;
-//                     if_axi.wstrb                <=
-//                             if_data_stream_write.strb<<burst_item_start_lane;
                     if_axi.wstrb                <=
                         ((1<<(1<<reg_axi_status_fields.burst_size))-1)<<burst_item_start_lane;
                 end else if (if_axi.wvalid & if_axi.wready) begin
@@ -441,7 +414,6 @@ module axi4_master #(
                 1: begin
                     if_axi.wdata                = if_data_stream_write.data<<burst_item_start_bit;
                     if_axi.wvalid               = if_data_stream_write.valid;
-//                     if_axi.wstrb                = if_data_stream_write.strb<<burst_item_start_lane;
                     if_axi.wstrb                =
                         ((1<<(1<<reg_axi_status_fields.burst_size))-1)<<burst_item_start_lane;
                     if_data_stream_write.ready  = if_axi.wready;
@@ -471,11 +443,11 @@ module axi4_master #(
     // note to myself: count_bursts needs to be a register because of logical 
     // path length
 
-    // TODO: should you get timing issues, MAYBE it helps to include this 
-    // conditional in the fsm_axi_addr_burst state machine, using non-blocking 
-    // assignments to burst_len alongside with the assignments to 
-    // len_last_burst. But the logic depth is so minimal that it would surprise 
-    // me if that changed anything.
+    // should you get timing issues, MAYBE it helps to include this conditional 
+    // in the fsm_axi_addr_burst state machine, using non-blocking assignments 
+    // to burst_len alongside with the assignments to len_last_burst. But the 
+    // logic depth is so minimal that it would surprise me if that changed 
+    // anything.
     always_comb begin: proc_burst_len
         if (count_bursts == 0)
             // (note that 1<=WIDTH_LEN_LAST_BURST<=8 because of parameter checks, 
@@ -641,23 +613,6 @@ module axi4_master #(
         end else begin
             if (core_triggered) begin
                 burst_item_start_lane   <= i_base_address[$clog2(AXI_DATA_BYTES)-1:0];
-//                 // TODO: if the path from base address AND burst type to start 
-//                 // lane becomes a timing problem, we'll need an extra cycle to 
-//                 // REALLY first only register, and then do any interpretation 
-//                 // (such as determining burst_item_start_lane)
-//                 case (i_axi_status_fields.burst_type)
-//                     AXI4_BURST_FIXED: begin
-//                         burst_item_start_lane   <= '0;
-//                     end
-//                     AXI4_BURST_INCR: begin
-//                         burst_item_start_lane   <= i_base_address[$clog2(AXI_DATA_BYTES)-1:0];
-//                     end
-//                     default: begin
-//                         // TODO: add the AXI4_BURST_WRAP case, once that is 
-//                         // implemented
-//                         burst_item_start_lane   <= '0;
-//                     end
-//                 endcase
             end else if (in_data_handshake) begin
                 // if the user set address etc correctly, this automatically 
                 // wraps around the way it should by means of the data width of 
@@ -695,7 +650,7 @@ module axi4_master #(
                         // (quick note: in theory, it can happen that 
                         // i_num_data_words is smaller than AXI4_MAX_BURST_LEN.  
                         // In questa looks like the tool pads/converts that 
-                        // correctly as expected, just leaving an error in case 
+                        // correctly as expected, just leaving a note in case 
                         // you ever see an error here with some tool)
                         if (i_num_data_words >= AXI4_MAX_BURST_LEN) begin
                             count_burst_items <= AXI4_MAX_BURST_LEN-1;

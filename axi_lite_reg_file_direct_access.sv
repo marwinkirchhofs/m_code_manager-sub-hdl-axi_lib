@@ -39,8 +39,6 @@ module axi_lite_reg_file_direct_access #(
     // INTERNAL SIGNALS
     //----------------------------------------------------------
 
-    genvar i;
-
     ifc_reg_file_direct_access #(
         .REGISTER_WIDTH         (REGISTER_WIDTH),
         .NUM_REGISTERS          (NUM_REGISTERS)
@@ -67,18 +65,11 @@ module axi_lite_reg_file_direct_access #(
     assign if_reg_file_masters[1].write_req     = if_reg_file_axi.write_req;
     assign if_reg_file_axi.read_data             = if_reg_file_masters[1].read_data;
 
-//     // temporary connection for the axi side register file interface -> will 
-//     // connect to the axi interface later on
-//     assign if_reg_file_axi.write_req[0] = i_write_axi_req;
-//     assign if_reg_file_axi.write_data[0] = i_write_axi_val;
-//     assign o_register = if_reg_file_axi.read_data[0];
-
 
     //----------------------------------------------------------
     // SUBMODULES
     //----------------------------------------------------------
 
-    // TODO: add the other parameters
     axi4_lite_reg_slave #(
         .ADDR_WIDTH                     (AXI_ADDR_WIDTH),
         .AXI_DATA_WIDTH                 (AXI_DATA_WIDTH),
