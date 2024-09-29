@@ -100,7 +100,7 @@ module axi4_lite_reg_slave #(
 
     logic   [ADDR_WIDTH-1:0]                reg_read_addr;
     logic                                   fetch_read_data;
-    logic   [$clog2(ADD_READ_LATENCY+1)-1:0]    count_wait_fetch_read_data;
+    logic   [$clog2(ADD_READ_LATENCY+1)-1:0]    count_resolve_read_addr;
 
     // AXI WRITE
     reg_file_item_t                         reg_file_item_write;
@@ -164,7 +164,7 @@ module axi4_lite_reg_slave #(
                 // file (otherwise you have a full path from the read address to 
                 // the register file, on which you also need to resolve the 
                 // address into the correct register ID. Goodbye clock frequency)
-                if (count_wait_fetch_read_data == '0) begin
+                if (count_resolve_read_addr == '0) begin
                     st_read_addr_next = ST_AXI_LITE_READ_VALID;
                 end else begin
                     st_read_addr_next = st_read_addr;
@@ -189,13 +189,13 @@ module axi4_lite_reg_slave #(
         if (ADD_READ_LATENCY>0) begin
             always_ff @(posedge clk) begin
                 if (fetch_read_data) begin
-                    count_wait_fetch_read_data <= ADD_READ_LATENCY;
+                    count_resolve_read_addr <= ADD_READ_LATENCY;
                 end else begin
-                    count_wait_fetch_read_data <= count_wait_fetch_read_data - 1;
+                    count_resolve_read_addr <= count_resolve_read_addr - 1;
                 end
             end
         end else begin
-            assign count_wait_fetch_read_data = '0;
+            assign count_resolve_read_addr = '0;
         end
     end endgenerate
 
