@@ -72,6 +72,7 @@ package axi_lib_pkg;
 
     typedef enum {
         ST_AXI_LITE_WRITE_READY,
+        ST_AXI_LITE_WRITE_RESOLVE,
         ST_AXI_LITE_WRITE_VALID,
         ST_AXI_LITE_WRITE_RESP
     } st_axi_lite_write_addr_t;

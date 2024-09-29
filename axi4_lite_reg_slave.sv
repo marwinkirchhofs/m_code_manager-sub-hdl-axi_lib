@@ -50,7 +50,9 @@ module axi4_lite_reg_slave #(
     // path from register file to axi can be made multi-cycle if READ_LATENCY>1
     // (note that the core has a read latency of 2 anyways (register address, 
     // fetch data), the parameter just sets the additional latency)
-    parameter                           ADD_READ_LATENCY        = 0
+    parameter                           ADD_READ_LATENCY        = 0,
+    // same story like read, but for write
+    parameter                           ADD_WRITE_LATENCY       = 0
 ) (
     input                                   clk,
     input                                   rst_n,
@@ -105,6 +107,8 @@ module axi4_lite_reg_slave #(
 
     st_axi_lite_write_addr_t                st_write_addr;
     st_axi_lite_write_addr_t                st_write_addr_next;
+
+    logic   [$clog2(ADD_WRITE_LATENCY+1)-1:0]   count_resolve_write_addr;
 
     // REGISTER FILE WRITE ACCESS
     // access to the register file write needs to be multiplexed, because the 
@@ -290,6 +294,17 @@ module axi4_lite_reg_slave #(
         case (st_write_addr)
             ST_AXI_LITE_WRITE_READY: begin
                 if (if_axi.awready & if_axi.awvalid) begin
+                    if (ADD_WRITE_LATENCY > 0) begin
+                        // remember: you don't have to go through the extra 
+                        // state, if you don't require additional write latency
+                        st_write_addr_next = ST_AXI_LITE_WRITE_RESOLVE;
+                    end else begin
+                        st_write_addr_next = ST_AXI_LITE_WRITE_VALID;
+                    end
+                end
+            end
+            ST_AXI_LITE_WRITE_RESOLVE: begin
+                if (count_resolve_write_addr == '0) begin
                     st_write_addr_next = ST_AXI_LITE_WRITE_VALID;
                 end
             end
@@ -308,6 +323,21 @@ module axi4_lite_reg_slave #(
             end
         endcase
     end
+
+    // WRITE RESOLVE
+    generate begin: gen_write_resolve_count
+        if (ADD_WRITE_LATENCY>0) begin
+            always_ff @(posedge clk) begin
+                if (if_axi.hs_aw()) begin
+                    count_resolve_write_addr <= ADD_WRITE_LATENCY;
+                end else begin
+                    count_resolve_write_addr <= count_resolve_write_addr - 1;
+                end
+            end
+        end else begin
+            assign count_resolve_write_addr = '0;
+        end
+    end endgenerate
 
     // WRITE OPERATION
 
