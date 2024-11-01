@@ -120,26 +120,6 @@ interface ifc_axi4 #(
         input rready
         );
 
-    modport monitor (
-        // WRITE ADDRESS CHANNEL
-        input awid, awaddr, awlen, awsize, awburst, awlock, awcache, awprot,
-        input awqos, awregion, awuser, awvalid,
-        input awready,
-        // WRITE DATA CHANNEL
-        input wid, wdata, wstrb, wlast, wuser, wvalid,
-        input wready,
-        // WRITE RESPONSE CHANNEL
-        input bid, bresp, buser, bvalid,
-        input bready,
-        // READ ADDRESS CHANNEL
-        input arid, araddr, arlen, arsize, arburst, arlock, arcache, arprot,
-        input arqos, arregion, aruser, arvalid,
-        input arready,
-        // READ DATA CHANNEL
-        input rid, rdata, rresp, rlast, ruser, rvalid,
-        input rready
-        );
-
 `ifndef VERILATOR
     // it might be that verilator has issues at dealing with assertions, so 
     // exclude them from verilator (TODO: check with the current verilator 

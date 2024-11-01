@@ -2,9 +2,7 @@
 
 interface ifc_axi4_lite #(
     parameter int ADDR_WIDTH = 32,
-    parameter int DATA_WIDTH = 32,
-    parameter real T_SETUP = 1,
-    parameter real T_CTOQ = 2
+    parameter int DATA_WIDTH = 32
 ) (
     input clk,
     input rst_n
@@ -57,48 +55,6 @@ interface ifc_axi4_lite #(
         return wready & wvalid;
     endfunction
 
-//     clocking cb @(posedge clk);
-//         default input #T_SETUP output #T_CTOQ;
-//         // WRITE ADDRESS CHANNEL
-//         output awaddr, awprot;
-//         output awvalid;
-//         input awready;
-//         // WRITE DATA CHANNEL
-//         output wdata, wstrb, wvalid;
-//         input wready;
-//         // WRITE RESPONSE CHANNEL
-//         input bresp, bvalid;
-//         output bready;
-//         // READ ADDRESS CHANNEL
-//         output araddr, arprot;
-//         output arvalid;
-//         input arready;
-//         // READ DATA CHANNEL
-//         input rdata, rresp, rvalid;
-//         output rready;
-//     endclocking
-
-    modport testbench (
-//         clocking cb,
-        // WRITE ADDRESS CHANNEL
-        output awaddr, awprot,
-        output awvalid,
-        input awready,
-        // WRITE DATA CHANNEL
-        output wdata, wstrb, wvalid,
-        input wready,
-        // WRITE RESPONSE CHANNEL
-        input bresp, bvalid,
-        output bready,
-        // READ ADDRESS CHANNEL
-        output araddr, arprot,
-        output arvalid,
-        input arready,
-        // READ DATA CHANNEL
-        input rdata, rresp, rvalid,
-        output rready
-        );
-
     modport master (
         import hs_r, hs_ar, hs_w, hs_aw,
         // WRITE ADDRESS CHANNEL
@@ -138,26 +94,6 @@ interface ifc_axi4_lite #(
         output arready,
         // READ DATA CHANNEL
         output rdata, rresp, rvalid,
-        input rready
-        );
-
-    modport monitor (
-        // WRITE ADDRESS CHANNEL
-        input awaddr, awprot,
-        input awvalid,
-        input awready,
-        // WRITE DATA CHANNEL
-        input wdata, wstrb, wvalid,
-        input wready,
-        // WRITE RESPONSE CHANNEL
-        input bresp, bvalid,
-        input bready,
-        // READ ADDRESS CHANNEL
-        input araddr, arprot,
-        input arvalid,
-        input arready,
-        // READ DATA CHANNEL
-        input rdata, rresp, rvalid,
         input rready
         );
 

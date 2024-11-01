@@ -29,8 +29,4 @@ interface ifc_data_stream_hs #(
         input data, valid, strb
     );
 
-    modport monitor (
-        input data, ready, valid, strb
-    );
-    
 endinterface

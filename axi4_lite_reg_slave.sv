@@ -74,11 +74,20 @@ module axi4_lite_reg_slave #(
         axi_addr_t axi_addr,
         axi_addr_t base_address = '0
     );
-        reg_file_item_t          hit;
+        reg_file_item_t         hit;
+        reg_entry_t             candidate_entry;
         hit.entry_found = 1'b0;
 
         for (int i=0; i<REG_FILE_NUM_REGISTERS; i++) begin
-            if (axi_addr_t'(AXI_LITE_REG_MAP_TABLE[i].addr) == (axi_addr - base_address)) begin
+            // (why the extra line for the candidate_entry, and not just do 
+            // AXI_LITE_REG_MAP_TABLE[i].addr in the condition? xelab (aka 
+            // vivado) fails to resolve the former, and as a result you can't 
+            // use hw emulation when exporting anything containing this core as 
+            // an IP for vitis (maybe only applies to alveo, haven't tried with 
+            // "standard" hardware like embedded ARM - but in the end it's about 
+            // xelab, not the platform)
+            candidate_entry = AXI_LITE_REG_MAP_TABLE[i];
+            if (axi_addr_t'(candidate_entry.addr) == (axi_addr - base_address)) begin
                 hit.entry_found = 1'b1;
                 hit.id = reg_file_id_t'(i);
                 hit.entry = AXI_LITE_REG_MAP_TABLE[i];
