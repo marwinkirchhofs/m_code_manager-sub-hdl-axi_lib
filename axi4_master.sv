@@ -11,9 +11,11 @@
 *
 *
 * * INTERFACE:
-*		[port name]		- [port description]
-* * inputs:
-* * outputs:
+* :o_word_last: for any direction (read/write), asserts DURING the last 
+* handshake of the data streaming interface (not necessary axi). May not assert 
+* if that data handshake occurs BEFORE the next trigger! (assuming that you 
+* normally do fetch everything that you requested from memory, before doing 
+* anything else with the core)
 *
 * The core does not allow for simultaneous reading and writing. It is either one 
 * or the other.
@@ -103,6 +105,7 @@ module axi4_master #(
     input                                   i_trigger,
     input                                   i_direction,
     input logic [$clog2(MAX_TOTAL_TRANSACTION_LENGTH)-1:0]      i_num_data_words,
+    output logic                            o_word_last,
 
     // USER DATA CONNECTION
     ifc_data_stream_hs.slave                if_data_stream_write,
@@ -373,6 +376,19 @@ module axi4_master #(
                     if_data_stream_write.ready = ~write_reg_valid | (if_axi.wvalid & if_axi.wready);
                 end else begin
                     if_data_stream_write.ready = ~write_reg_valid;
+                    // note to myself: I once put a check here to also deassert 
+                    // during the last axi handshake of a burst:
+                    //
+                    // `if_data_stream_write.ready = ~write_reg_valid & ~last_axi_handshake;`
+                    //
+                    // Apparently the idea was to not accidentally fetch one 
+                    // more data word while you are already transmitting the 
+                    // last axi data word. No idea why that should've been 
+                    // necessary, because right after that last handshake, 
+                    // data_busy deasserts, which blocks 
+                    // if_data_stream_write.ready as per this logic block, so 
+                    // there is no way to read an accidental word into 
+                    // write_reg_valid which is not part of this transmission.
                 end
             end
         end
@@ -407,6 +423,52 @@ module axi4_master #(
                 end
             end
         end
+
+        always_comb begin: proc_o_word_last
+            case (reg_direction)
+                AXI4_DIR_WRITE: begin
+                    // logic is:
+                    // at a handshake, check itself if that was the 
+                    // second-to-last handshake. Two possible sufficient 
+                    // conditions:
+                    // 1. axi is just writing the third-to-last element ->
+                    //     `write_reg_valid && count_burst_items==2`
+                    // 2. axi write is empty, and waiting for second-to-last
+                    //     `~write_reg_valid && count_burst_items==1`
+                    // if so, set o_word_last, then if it is set, unset at 
+                    // the next handshake.
+                    // (note that count_burst_items==2 is always within the 
+                    // valid number range for count_burst_items)
+                    o_word_last =   if_data_stream_write.hs_ && data_busy && (
+                                        ((count_burst_items == '0) && ~write_reg_valid) ||
+                                        ((count_burst_items == 1) && write_reg_valid));
+                end
+                AXI4_DIR_READ: begin
+                    // why `~data_busy`, and not something like 
+                    // `count_burst_items==0`? There is no way that the last 
+                    // data stream handshake can occur while data is busy, 
+                    // because that means axi is still receiving the last data.  
+                    // data_busy immediately deasserts the cycle after the axi 
+                    // handshake, so you can't miss an if_data_stream_read hs 
+                    // "in-between of the last axi hs and the de-assertion of 
+                    // data_busy". count_burst_items==0 is misleading, if you do 
+                    // that you get a second o_word_last assertion, namely at 
+                    // the last axi hs. telling from experience...
+                    // 
+                    // Yes, relying on data_busy only works as long as no new 
+                    // transmission is triggered before write_reg_valid is 
+                    // cleared. It feels ok to assume you do need all the data 
+                    // that comes from the transmission, before you trigger 
+                    // a new one.
+                    o_word_last = if_data_stream_read.hs_ & read_reg_valid & ~data_busy;
+                end
+                default: begin
+                    // latch-preventing dummy, unreachable
+                    o_word_last = 1'b0;
+                end
+            endcase
+        end
+
     end else begin: cond_no_register_data_stream
         // REGISTER_DATA_STREAM=0
         always_comb begin
@@ -432,6 +494,13 @@ module axi4_master #(
                 end
             endcase
         end
+
+        // (not necessary to check data operation state here, because any 
+        // axi_data_handshake is gated outside of a transmission by data_busy)
+        assign o_word_last = axi_data_handshake &&
+                           (count_burst_items == '0) &&
+                           (count_data_words < AXI4_MAX_BURST_LEN);
+
     end
     end
     endgenerate
