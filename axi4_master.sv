@@ -423,6 +423,25 @@ module axi4_master #(
                 end
             end
         end
+        initial begin: init_if_data_stream_read_data
+            // FPGA/SIM ONLY!!!! (hoping that the tools either ignore this, or 
+            // turn it into a bitstream-PoR initialization) why is this even 
+            // here?  stupid reason, simulation-only: when running a fullmat as 
+            // the first mem read operation, nothing has written to 
+            // if_data_stream_read yet, so it's still undefined ('X'). But that 
+            // stream eventually cascades right through the DSPs in the fullmat 
+            // engine core. Wouldn't matter, because it gets multiplied with 
+            // zeros due to the invalidated vector indices, but in the DSP 
+            // simulation model an 'X' screws up the DSP output, and because 
+            // that one accumulates, you're missing the output of the first 
+            // subtransmission. So data could be whatever, it just can't be 'X' 
+            // in simulation, so dummy-initialize.
+            // Since it's an interface, not a simple signal, I can't do normal 
+            // declaration-initialization, and I can't initialize in the 
+            // interface class because the signal can as well be wire, instead 
+            // of a register. Hardware is fun...
+            if_data_stream_read.data = '0;
+        end
 
         always_comb begin: proc_o_word_last
             case (reg_direction)
