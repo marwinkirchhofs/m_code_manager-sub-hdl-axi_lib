@@ -476,7 +476,8 @@ module axi4_master #(
                     // the next handshake.
                     // (note that count_burst_items==2 is always within the 
                     // valid number range for count_burst_items)
-                    o_word_last =   if_data_stream_write.hs_ && data_busy && (
+                    o_word_last =   if_data_stream_write.hs_ && data_busy &&
+                                    (count_data_words <= AXI_MAX_BURST_LEN) && (
                                         ((count_burst_items == '0) && ~write_reg_valid) ||
                                         ((count_burst_items == 1) && write_reg_valid));
                 end
@@ -497,7 +498,8 @@ module axi4_master #(
                     // cleared. It feels ok to assume you do need all the data 
                     // that comes from the transmission, before you trigger 
                     // a new one.
-                    o_word_last = if_data_stream_read.hs_ & read_reg_valid & ~data_busy;
+                    o_word_last = if_data_stream_read.hs_ & read_reg_valid & ~data_busy &&
+                                  (count_data_words <= AXI_MAX_BURST_LEN);
                 end
                 default: begin
                     // latch-preventing dummy, unreachable
@@ -536,7 +538,7 @@ module axi4_master #(
         // axi_data_handshake is gated outside of a transmission by data_busy)
         assign o_word_last = axi_data_handshake &&
                            (count_burst_items == '0) &&
-                           (count_data_words < AXI4_MAX_BURST_LEN);
+                           (count_data_words <= AXI_MAX_BURST_LEN);
 
     end
     end
@@ -793,6 +795,9 @@ module axi4_master #(
                             // hardware if count_data_words has fewer fixed-size 
                             // subtractions and never actually actually is 
                             // a running counter. Might be bs though...
+                            // (note here: you could probably also compare just 
+                            // `>` - setting to 0 right-away or subtracting 
+                            // a number from itself is the same thing)
                             if (count_data_words >= AXI_MAX_BURST_LEN) begin
                                 count_data_words <= count_data_words - AXI_MAX_BURST_LEN;
                             end else begin
