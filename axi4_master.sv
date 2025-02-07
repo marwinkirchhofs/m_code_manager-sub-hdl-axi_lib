@@ -17,6 +17,16 @@
 * normally do fetch everything that you requested from memory, before doing 
 * anything else with the core)
 *
+* :AXI_VERSION: "AXI4" (default, reasonably tested) or "AXI3" (!!!  
+* experimental/under development !!!) - note that AXI3 support currently may be 
+* incomplete, and is restricted to a subset of AXI4, since it is only added 
+* where it was needed (maximum burst length). Some implications of that, with no 
+* guarantee for completeness:
+*     * support for AXI3/4-adaptive maximum burst length
+*     * no support for AXI3 write interleaving and locked transfers
+*     * All AXI4-only signals are currently still driven, regardless of 
+*     AXI_VERSION.
+*
 * The core does not allow for simultaneous reading and writing. It is either one 
 * or the other.
 *
@@ -92,6 +102,7 @@ module axi4_master #(
     parameter                           AXI_USER_WIDTH                  = 0,
     parameter                           AXI_ID_WIDTH                    = 0,
     parameter                           USER_DATA_WIDTH                 = 32,
+    parameter string                    AXI_VERSION                     = "AXI4",
     // maximum number of data words in one user transaction - meaning one time 
     // asserting trigger (both for read and write)
     parameter                           MAX_TOTAL_TRANSACTION_LENGTH    = 128,
@@ -134,6 +145,10 @@ module axi4_master #(
     //----------------------------------------------------------
 
     generate begin: gen_parameter_checks
+        if (! (AXI_VERSION == "AXI4" || AXI_VERSION == "AXI3")) begin
+            $error("Invalid AXI_VERSION: \"%s\"", AXI_VERSION);
+        end
+
         // USER_DATA_WIDTH < AXI_DATA_WIDTH
         // because otherwise you can't assign burst items to the axi data bus 
         // without splitting them up, but the user can take over the splitting 
@@ -154,7 +169,7 @@ module axi4_master #(
                 "MAX_TOTAL_TRANSACTION_LENGTH (%0d) must be >= 2",
                 MAX_TOTAL_TRANSACTION_LENGTH));
         end
-        
+
         if (~(AXI_DATA_WIDTH inside {8, 16, 32, 64, 128, 256, 512, 1024}))
         begin: gen_check_axi_data_width_range
             $error($sformatf("Invalid (non-power of 2) AXI_DATA_WIDTH (%0d)", AXI_DATA_WIDTH));
@@ -166,6 +181,9 @@ module axi4_master #(
     end
     endgenerate
 
+    localparam AXI_MAX_BURST_LEN = (AXI_VERSION == "AXI4") ? AXI4_MAX_BURST_LEN : AXI3_MAX_BURST_LEN;
+    localparam AXI_BURST_LEN_WIDTH = $clog2(AXI_MAX_BURST_LEN);
+
 
     //----------------------------------------------------------
     // HELPERS
@@ -174,26 +192,28 @@ module axi4_master #(
     function automatic logic [AXI_ADDR_WIDTH-1:0] fun_burst_incr_axi_address (
         logic [AXI_ADDR_WIDTH-1:0] address, logic [2:0] burst_size);
         // note: technically you don't need the clog2 part, because 
-        // AXI4_MAX_BURST_LEN is a power of 2. It's just implemented this way 
+        // AXI_MAX_BURST_LEN is a power of 2. It's just implemented this way 
         // such that really no tool gets to the idea of inferring a DSP or mult 
         // circuit, while it's guaranteed to be a bit shift.
-        return address + ((32'b1<<burst_size) << $clog2(AXI4_MAX_BURST_LEN));
+        return address + ((32'b1<<burst_size) << $clog2(AXI_MAX_BURST_LEN));
     endfunction
 
     //----------------------------------------------------------
     // INTERNAL SIGNALS
     //----------------------------------------------------------
 
-    localparam MAX_NUM_BURSTS = int'($ceil(MAX_TOTAL_TRANSACTION_LENGTH/AXI4_MAX_BURST_LEN));
+    localparam MAX_NUM_BURSTS = int'($ceil(MAX_TOTAL_TRANSACTION_LENGTH/AXI_MAX_BURST_LEN));
     localparam AXI_DATA_BYTES = AXI_DATA_WIDTH/8;
     // length of last burst needs to have conditional width for slicing: 
     // According to axi specs, max width is 8 bits. But for the actual value, we 
     // mask the LSBs of i_num_data_words. Highly likely that some tool at some 
     // point righteously complains if the slicing is wider than the actual 
     // signal.
+    // TODO: The 8 can't be hard-coded for AXI3 (same story where 
+    // WIDTH_LEN_LAST_BURST is used)
     localparam WIDTH_LEN_LAST_BURST =
-        MAX_TOTAL_TRANSACTION_LENGTH >= AXI4_MAX_BURST_LEN ?
-        8 : $clog2(MAX_TOTAL_TRANSACTION_LENGTH);
+        MAX_TOTAL_TRANSACTION_LENGTH >= AXI_MAX_BURST_LEN ?
+        AXI_BURST_LEN_WIDTH : $clog2(MAX_TOTAL_TRANSACTION_LENGTH);
 
     st_axi4_master_t                        st_axi_master;
     st_axi4_master_t                        st_axi_master_next;
@@ -216,14 +236,12 @@ module axi4_master #(
     // TRANSACTION ADDR/BURST MANAGEMENT
     logic [$clog2(MAX_TOTAL_TRANSACTION_LENGTH)-1:0]    count_data_words;
     logic [$clog2(MAX_NUM_BURSTS)-1:0]      count_bursts;
-    // why [7:0]? because at maximum this can be AXI4_MAX_BURST_LEN-1, which 
-    // takes up exactly that
     logic [WIDTH_LEN_LAST_BURST-1:0]        len_last_burst;
     logic [$clog2(AXI_DATA_BYTES)-1:0]      burst_item_start_lane;
-    logic [7:0]                             burst_len;
+    logic [AXI_BURST_LEN_WIDTH-1:0]         burst_len;
 
     // TRANSACTION DATA MANAGEMENT
-    logic [$clog2(AXI4_MAX_BURST_LEN)-1:0]  count_burst_items;
+    logic [$clog2(AXI_MAX_BURST_LEN)-1:0]  count_burst_items;
 
     // INTERNAL OPERATION
 
@@ -538,11 +556,12 @@ module axi4_master #(
     // anything.
     always_comb begin: proc_burst_len
         if (count_bursts == 0)
-            // (note that 1<=WIDTH_LEN_LAST_BURST<=8 because of parameter checks, 
-        // so this slicing will/should always result in something that is valid
-            burst_len = {{(8-WIDTH_LEN_LAST_BURST){1'b0}}, len_last_burst};
+            // (note that 1<=WIDTH_LEN_LAST_BURST<=AXI_BURST_LEN_WIDTH because 
+            // of parameter checks, so this slicing will/should always result in 
+            // something that is valid
+            burst_len = {{(AXI_BURST_LEN_WIDTH-WIDTH_LEN_LAST_BURST){1'b0}}, len_last_burst};
         else
-            burst_len = (AXI4_MAX_BURST_LEN-1);
+            burst_len = (AXI_MAX_BURST_LEN-1);
     end
 
     always_comb begin: multiplex_axi_addr
@@ -582,9 +601,9 @@ module axi4_master #(
                         axi_address         <= i_base_address;
                         /*
                         * what you basically want in this section: for 
-                        * i_num_data_words, take it modulo AXI4_MAX_BURST_LEN 
+                        * i_num_data_words, take it modulo AXI_MAX_BURST_LEN 
                     * for the last burst length, and integer divide it by 
-                    * AXI4_MAX_BURST_LEN for the number of bursts. Pitfalls:
+                    * AXI_MAX_BURST_LEN for the number of bursts. Pitfalls:
                         * - You need a -1 to convert from "human" to "machine" 
                         *   counting
                         * - You need another -1 for len_last_burst, because axi 
@@ -736,12 +755,12 @@ module axi4_master #(
                     if (core_triggered) begin
                         count_data_words        <= i_num_data_words;
                         // (quick note: in theory, it can happen that 
-                        // i_num_data_words is smaller than AXI4_MAX_BURST_LEN.  
+                        // i_num_data_words is smaller than AXI_MAX_BURST_LEN.  
                         // In questa looks like the tool pads/converts that 
                         // correctly as expected, just leaving a note in case 
                         // you ever see an error here with some tool)
-                        if (i_num_data_words >= AXI4_MAX_BURST_LEN) begin
-                            count_burst_items <= AXI4_MAX_BURST_LEN-1;
+                        if (i_num_data_words >= AXI_MAX_BURST_LEN) begin
+                            count_burst_items <= AXI_MAX_BURST_LEN-1;
                         end else begin
                             count_burst_items <= i_num_data_words-1;
                         end
@@ -764,7 +783,7 @@ module axi4_master #(
                             st_axi_master_data <= ST_AXI_MASTER_DATA_RESP;
 
                             // prepare next burst
-                            // (comparing with 2*AXI4_MAX_BURST_LEN, because 
+                            // (comparing with 2*AXI_MAX_BURST_LEN, because 
                             // count_data_words still holds the pre-subtraction 
                             // value from the beginning of the current burst)
 
@@ -774,15 +793,16 @@ module axi4_master #(
                             // hardware if count_data_words has fewer fixed-size 
                             // subtractions and never actually actually is 
                             // a running counter. Might be bs though...
-                            if (count_data_words >= AXI4_MAX_BURST_LEN) begin
-                                count_data_words <= count_data_words - AXI4_MAX_BURST_LEN;
+                            if (count_data_words >= AXI_MAX_BURST_LEN) begin
+                                count_data_words <= count_data_words - AXI_MAX_BURST_LEN;
                             end else begin
+                                // -> end transmission
                                 count_data_words <= '0;
                             end
-                            if (count_data_words >= AXI4_MAX_BURST_LEN<<1) begin
-                                count_burst_items <= AXI4_MAX_BURST_LEN-1;
+                            if (count_data_words >= AXI_MAX_BURST_LEN<<1) begin
+                                count_burst_items <= AXI_MAX_BURST_LEN-1;
                             end else begin
-                                count_burst_items <= count_data_words - AXI4_MAX_BURST_LEN - 1;
+                                count_burst_items <= count_data_words - AXI_MAX_BURST_LEN - 1;
                             end
 
                         end else begin                      // next burst item
