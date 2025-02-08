@@ -498,8 +498,9 @@ module axi4_master #(
                     // cleared. It feels ok to assume you do need all the data 
                     // that comes from the transmission, before you trigger 
                     // a new one.
-                    o_word_last = if_data_stream_read.hs_ & read_reg_valid & ~data_busy &&
-                                  (count_data_words <= AXI_MAX_BURST_LEN);
+                    o_word_last = if_data_stream_read.hs_ & read_reg_valid &
+                                  ~data_busy &&
+                                  (count_data_words == '0);
                 end
                 default: begin
                     // latch-preventing dummy, unreachable
