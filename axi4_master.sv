@@ -115,7 +115,7 @@ module axi4_master #(
     output logic                            o_ready,
     input                                   i_trigger,
     input                                   i_direction,
-    input logic [$clog2(MAX_TOTAL_TRANSACTION_LENGTH)-1:0]      i_num_data_words,
+    input logic [$clog2(MAX_TOTAL_TRANSACTION_LENGTH+1)-1:0]      i_num_data_words,
     output logic                            o_word_last,
 
     // USER DATA CONNECTION
@@ -234,7 +234,7 @@ module axi4_master #(
     logic                                   axi_addr_valid;
 
     // TRANSACTION ADDR/BURST MANAGEMENT
-    logic [$clog2(MAX_TOTAL_TRANSACTION_LENGTH)-1:0]    count_data_words;
+    logic [$clog2(MAX_TOTAL_TRANSACTION_LENGTH+1)-1:0]    count_data_words;
     logic [$clog2(MAX_NUM_BURSTS)-1:0]      count_bursts;
     logic [WIDTH_LEN_LAST_BURST-1:0]        len_last_burst;
     logic [$clog2(AXI_DATA_BYTES)-1:0]      burst_item_start_lane;
