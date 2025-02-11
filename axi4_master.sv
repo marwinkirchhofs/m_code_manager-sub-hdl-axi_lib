@@ -7,10 +7,50 @@
 * target devices:
 * tool versions:
 *
-* * DESCRIPTION:
+* DESCRIPTION:
+* axi4 read/write master with support for INCR and FIXED bursts, arbitrary 
+* number of transmission words (beyond maximum burst lengths), and limited 
+* adaptability for axi3 (see parameter AXI_VERSION). No support for 
+* "sort-of-optional"/multi-client axi fields like rid and ruser.
 *
+* OPERATION:
 *
-* * INTERFACE:
+* The core does not allow for simultaneous reading and writing. It is either one 
+* or the other (at a time).
+*
+* !!!Data handshaking protocol: Since the data handshaking is exposed to the 
+* data stream interface, that interface (generally) also needs to obey the axi 
+* handshaking signal dependencies!!! There are relaxations, like with output 
+* registers enabled for instance, when writing a master can actually wait for 
+* the stream ready signal to assert - which in plain axi it couldn't. Still, 
+* you're on the safe side if you obey the axi restrictions, and if you have 
+* a good reason not to, there is a chance you can do so, but you have to check 
+* with the code here.
+*
+* !!!(in this first iteration,) it is possible for the core to stall with 
+* a faulty or non-supported input! For example, wrap bursts are not implemented, 
+* or if an incr burst is issued with i_num_data_words=0 (which makes no sense), 
+* that can break things as well!!! TODO: of course fix that; it might be an idea 
+* to add msgs flags for that -> require the parent to monitor the flags after 
+* issuing anything.
+*
+* The core does populate status information about the transaction in o_msgs. It 
+* might be necessary to monitor those from the parent module side. As a rule 
+* (hopefully), everything that causes a transaction to not be properly executed 
+* (abort or whatever) has its according flag.
+* write response: the write response (bresp) of the last write burst is 
+* registered in o_msgs, should the parent want to look at that. The core aborts 
+* at a non-okay response.
+*
+* strb: the core currently does not apply strb when reading (it is still 
+* forwarded via the ifc_data_stream_hs interface of course).  I'm not sure if 
+* it's better to add that as a parameter, or as a port.  Maybe time will tell, 
+* and then I'll do that.
+* 
+* For incr bursts, non-aligned base addresses (with respect to AXI_DATA_WIDTH 
+* and burst size) will most likely lead to faulty behavior.
+*
+* INTERFACE:
 * :o_word_last: for any direction (read/write), asserts DURING the last 
 * handshake of the data streaming interface (not necessary axi). May not assert 
 * if that data handshake occurs BEFORE the next trigger! (assuming that you 
@@ -27,20 +67,15 @@
 *     * All AXI4-only signals are currently still driven, regardless of 
 *     AXI_VERSION.
 *
-* The core does not allow for simultaneous reading and writing. It is either one 
-* or the other.
+* INTERNALS:
 *
-* The core does populate status information about the transaction in o_msgs. It 
-* might be necessary to monitor those from the parent module side. As a rule 
-* (hopefully), everything that causes a transaction to not be properly executed 
-* (abort or whatever) has its according flag.
+* For INCR burst type transactions, the core just uses the maximum burst length 
+* (256) as long as possible. Thus a package of i_num_data_words=260 items would 
+* be transmitted as one burst of length 256, and the second burst of length 4.
 *
-* !!!(in this first iteration,) it is possible for the core to stall with 
-* a faulty or non-supported input! For example, wrap bursts are not implemented, 
-* or if an incr burst is issued with i_num_data_words=0 (which makes no sense), 
-* that can break things as well!!! TODO: of course fix that; it might be an idea 
-* to add msgs flags for that -> require the parent to monitor the flags after 
-* issuing anything.
+* bresp: currently, the core is designed to always take at least one cycle for 
+* the write response. I don't know for sure if that is required by the protocol, 
+* I'll test that. However, it does help with timing closure...
 *
 * handshake latency data stream: As far as I see it, even with 
 * REGISTER_DATA_STREAM=1, the ready signal of the first stage (if_axi.rready and 
@@ -50,10 +85,8 @@
 * implement some solution for the respective data stream interface signals to be 
 * registered at the interface. Some sort of lookahead or buffer at whatever your 
 * data source/sink is, for example.
-* 
-* For INCR burst type transactions, the core just uses the maximum burst length 
-* (256) as long as possible. Thus a package of i_num_data_words=260 items would 
-* be transmitted as one burst of length 256, and the second burst of length 4.
+*
+* CONSIDERATIONS:
 *
 * actually, in the long run the burst type could be a parameter. Or even two 
 * parameters, one that tells whether it's a parameter or a port, the other one 
@@ -61,37 +94,12 @@
 * that you'd always approach with the same type of burst, and then again you 
 * just ease the implementation and make it potentially faster.
 *
-* strb: the core currently does not apply strb when reading (it is still 
-* forwarded via the ifc_data_stream_hs interface of course).  I'm not sure if 
-* it's better to add that as a parameter, or as a port.  Maybe time will tell, 
-* and then I'll do that.
-*
-* !!!Data handshaking protocol: Since the data handshaking is exposed to the 
-* data stream interface, that interface also needs to obey the axi handshaking 
-* signal dependencies!!! TODO: An option could be to implement a sort of 
-* heralding protocol checker (and maybe make that parameterizable), which 
-* prevents the parent core from deadlocking the interface. Or I add that as an 
-* option to an encapsulating core, not sure yet which is better.
-* Edit: To be honest, there is not too much left to obey, as far as I see it.  
-* Don't wait for a ready to assert the valid, that should do it at first glance,
-* you can expect that from someone who uses this core.
-* 
-* write response: the write response (bresp) of the last write burst is 
-* registered in o_msgs, should the parent want to look at that. The core aborts 
-* at a non-okay response.
-* 
-* bresp: currently, the core is designed to always take at least one cycle for 
-* the write response. I don't know for sure if that is required by the protocol, 
-* I'll test that. However, it does help with timing closure...
-*
-* For incr bursts, non-aligned base addresses (with respect to AXI_DATA_WIDTH 
-* and burst size) will most likely lead to faulty behavior.
-*
-* The long To-Do list:
+* The To-Do list:
 * - handle (incoming) axi status signals:
 *     - rid
 *     - ruser
 *     - rresp
+*
 */
 
 import axi_lib_pkg::*;
@@ -616,16 +624,16 @@ module axi4_master #(
                         axi_address         <= i_base_address;
                         /*
                         * what you basically want in this section: for 
-                        * i_num_data_words, take it modulo AXI_MAX_BURST_LEN 
-                    * for the last burst length, and integer divide it by 
-                    * AXI_MAX_BURST_LEN for the number of bursts. Pitfalls:
+                        * i_num_data_words, take it modulo AXI_MAX_BURST_LEN for 
+                        * the last burst length, and integer divide it by 
+                        * AXI_MAX_BURST_LEN for the number of bursts. Pitfalls:
                         * - You need a -1 to convert from "human" to "machine" 
                         *   counting
                         * - You need another -1 for len_last_burst, because axi 
                         *   adds 1 again for the actual number of bursts
                         * - you need to pay attention with the width for 
-                    *   len_last_burst, because it may or may not be wider thon 
-                *   i_num_data_words.
+                        *   len_last_burst, because it may or may not be wider 
+                        *   thon i_num_data_words.
                         */
                         if (MAX_NUM_BURSTS == 1) begin
                             // TODO: this may stall the core if for whatever 
