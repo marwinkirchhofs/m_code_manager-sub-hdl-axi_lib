@@ -206,6 +206,7 @@ module axi4_master #(
         return address + ((32'b1<<burst_size) << $clog2(AXI_MAX_BURST_LEN));
     endfunction
 
+
     //----------------------------------------------------------
     // INTERNAL SIGNALS
     //----------------------------------------------------------
@@ -265,6 +266,7 @@ module axi4_master #(
     // state machine can both issue the flag and adjust operation, buth that 
     // another state machine can handle set and reset for the flags
     axi4_master_msgs_t                      set_msgs;
+
 
     //----------------------------------------------------------
     // OPERATION
@@ -894,6 +896,22 @@ module axi4_master #(
             end
         end
     end
+
+    //----------------------------
+    // UNSUPPORTED SIGNALS
+    //----------------------------
+
+    generate begin: gen_unsupported_signals
+        if (AXI_VERSION == "AXI4") begin
+            assign if_axi.awlock = 1'b0;
+            assign if_axi.arlock = 1'b0;
+        end else begin
+            // (not implemented in ifc_axi4, but in theory AXI3 has 2-bit lock 
+            // signals, AXI4 has 1-bit)
+            assign if_axi.awlock = '0;
+            assign if_axi.arlock = '0;
+        end
+    end endgenerate
 
 endmodule
 
