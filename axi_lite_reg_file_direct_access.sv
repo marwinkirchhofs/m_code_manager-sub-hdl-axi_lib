@@ -8,6 +8,11 @@
 * tool versions:
 *
 * * DESCRIPTION:
+* 
+* in case of a write to the same register from both hardware and axi, hardware 
+* takes precedence, the software write is ignored (motivated by situations where 
+* a clear_on_read from software should be overwritten by hardware, which might 
+* have an update to populate).
 *
 * * INTERFACE:
 *		[port name]		- [port description]
@@ -47,7 +52,7 @@ module axi_lite_reg_file_direct_access #(
     ifc_reg_file_direct_access #(
         .REGISTER_WIDTH         (REGISTER_WIDTH),
         .NUM_REGISTERS          (NUM_REGISTERS)
-    ) if_reg_file_masters [NUM_REG_FILE_MASTERS](clk);
+    ) ifs_reg_file_masters [NUM_REG_FILE_MASTERS](clk);
 
 
     //----------------------------------------------------------
@@ -55,15 +60,17 @@ module axi_lite_reg_file_direct_access #(
     //----------------------------------------------------------
 
     // ugly way of "merging" the the hw and axi interfaces into 
-    // if_reg_file_masters. But passing an actual array during the reg file 
+    // ifs_reg_file_masters. But passing an actual array during the reg file 
     // instantiation is the only way of not getting any warning, and especially 
     // for verilator (linting) to not straight-up throw an error and abort.
-    assign if_reg_file_masters[0].write_data    = if_reg_file_hw.write_data;
-    assign if_reg_file_masters[0].write_req     = if_reg_file_hw.write_req;
-    assign if_reg_file_hw.read_data             = if_reg_file_masters[0].read_data;
-    assign if_reg_file_masters[1].write_data    = if_reg_file_axi.write_data;
-    assign if_reg_file_masters[1].write_req     = if_reg_file_axi.write_req;
-    assign if_reg_file_axi.read_data             = if_reg_file_masters[1].read_data;
+    assign ifs_reg_file_masters[0].write_data   = if_reg_file_hw.write_data;
+    assign ifs_reg_file_masters[0].write_mask   = if_reg_file_hw.write_mask;
+    assign ifs_reg_file_masters[0].write_req    = if_reg_file_hw.write_req;
+    assign if_reg_file_hw.read_data             = ifs_reg_file_masters[0].read_data;
+    assign ifs_reg_file_masters[1].write_data   = if_reg_file_axi.write_data;
+    assign ifs_reg_file_masters[1].write_mask   = if_reg_file_axi.write_mask;
+    assign ifs_reg_file_masters[1].write_req    = if_reg_file_axi.write_req;
+    assign if_reg_file_axi.read_data            = ifs_reg_file_masters[1].read_data;
 
 
     //----------------------------------------------------------
@@ -94,7 +101,7 @@ module axi_lite_reg_file_direct_access #(
     ) inst_reg_file_direct_access (
         .clk                            (clk),
         .rst_n                          (rst_n),
-        .if_reg_file                    (if_reg_file_masters)
+        .ifs_reg_file                   (ifs_reg_file_masters)
     );
 
 endmodule

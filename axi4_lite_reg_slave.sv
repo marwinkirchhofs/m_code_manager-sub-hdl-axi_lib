@@ -433,6 +433,10 @@ module axi4_lite_reg_slave #(
                 end
             end
         end
+
+        // writes from software are always the full register, masking is only 
+        // hardware side
+        assign if_reg_file.write_mask[i] = '1;
     end
     endgenerate
 
