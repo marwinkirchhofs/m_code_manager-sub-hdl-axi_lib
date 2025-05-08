@@ -40,6 +40,8 @@ import axi_lib_pkg::*;
 import reg_file_pkg::*;
 
 module axi4_lite_reg_slave #(
+    // (actual axi bus address width, not the width of the register file address 
+    // range)
     parameter                           ADDR_WIDTH              = 32,
     parameter                           AXI_DATA_WIDTH          = 32,
     parameter                           AXI_BASE_ADDR           = '0,
@@ -107,7 +109,8 @@ module axi4_lite_reg_slave #(
     st_axi_lite_read_addr_t                 st_read_addr;
     st_axi_lite_read_addr_t                 st_read_addr_next;
 
-    logic   [ADDR_WIDTH-1:0]                reg_read_addr;
+    logic   [REG_FILE_AXI_ADDR_WIDTH-1:0]   reg_read_reg_file_addr;
+    reg_file_id_t                           reg_file_id_read;
     logic                                   fetch_read_data;
     logic   [$clog2(ADD_READ_LATENCY+1)-1:0]    count_resolve_read_addr;
 
@@ -127,7 +130,7 @@ module axi4_lite_reg_slave #(
     reg_file_id_t                           reg_clear_id;
     logic                                   reg_write_req;
     reg_file_id_t                           reg_write_id;
-    logic   [ADDR_WIDTH-1:0]                reg_write_addr;
+    logic   [REG_FILE_AXI_ADDR_WIDTH-1:0]   reg_write_reg_file_addr;
     logic   [AXI_DATA_WIDTH-1:0]            reg_write_data;
 
     //----------------------------------------------------------
@@ -142,7 +145,11 @@ module axi4_lite_reg_slave #(
     // READ
     //----------------------------
 
-    assign reg_file_item_read = get_reg_item_from_axi_addr(reg_read_addr, AXI_BASE_ADDR);
+//     assign reg_file_item_read = get_reg_item_from_axi_addr(reg_read_reg_file_addr, AXI_BASE_ADDR);
+    assign reg_file_item_read.entry = AXI_LITE_REG_MAP_TABLE[reg_file_id_read];
+    assign reg_file_item_read.entry_found =
+                            (reg_file_id_read == REG_FILE_ID_INVALID) ? 1'b0 : 1'b1;
+    assign reg_file_item_read.id = reg_file_id_read;
     
     // READ HANDSHAKES
     assign if_axi.arready   =   st_read_addr == ST_AXI_LITE_READ_READY;
@@ -215,7 +222,7 @@ module axi4_lite_reg_slave #(
     begin: proc_register_read_address
         fetch_read_data <= 1'b0;
         if (if_axi.hs_ar()) begin
-            reg_read_addr       <= if_axi.araddr;
+            reg_read_reg_file_addr       <= if_axi.araddr[REG_FILE_AXI_ADDR_WIDTH-1:0];
 
             if (st_read_addr == ST_AXI_LITE_READ_READY) begin
                 fetch_read_data <= 1'b1;
@@ -275,7 +282,7 @@ module axi4_lite_reg_slave #(
     //----------------------------
 
 //     assign reg_file_item_write = get_reg_item_from_axi_addr(if_axi.awaddr, AXI_BASE_ADDR);
-    assign reg_file_item_write = get_reg_item_from_axi_addr(reg_write_addr, AXI_BASE_ADDR);
+    assign reg_file_item_write = get_reg_item_from_axi_addr(reg_write_reg_file_addr, AXI_BASE_ADDR);
 
     assign if_axi.awready   =   st_write_addr == ST_AXI_LITE_WRITE_READY;
     assign if_axi.wready    =   st_write_addr == ST_AXI_LITE_WRITE_VALID;
@@ -354,7 +361,7 @@ module axi4_lite_reg_slave #(
     always_ff @(posedge clk)
     begin: proc_register_write_address
         if (if_axi.awready & if_axi.awvalid) begin
-            reg_write_addr      <= if_axi.awaddr;
+            reg_write_reg_file_addr      <= if_axi.awaddr[REG_FILE_AXI_ADDR_WIDTH-1:0];
         end
     end
 
@@ -439,6 +446,27 @@ module axi4_lite_reg_slave #(
         assign if_reg_file.write_mask[i] = '1;
     end
     endgenerate
+
+
+    //----------------------------------------------------------
+    // SUBMODULES
+    //----------------------------------------------------------
+
+    reg_file_rom_map_addr_id  #(
+    ) inst_reg_file_rom_map_addr_id_read (
+        .clk                            (clk),
+        .rst_n                          (rst_n),
+        .i_addr                         (reg_read_reg_file_addr),
+        .o_id                           (reg_file_id_read)
+    );
+
+    reg_file_rom_map_addr_id  #(
+    ) inst_reg_file_rom_map_addr_id_write (
+        .clk                            (clk),
+        .rst_n                          (rst_n),
+        .i_addr                         (reg_write_reg_file_addr),
+        .o_id                           ()
+    );
 
 endmodule
 
