@@ -66,6 +66,24 @@
 *     * no support for AXI3 write interleaving and locked transfers
 *     * All AXI4-only signals are currently still driven, regardless of 
 *     AXI_VERSION.
+* :AXI_BURST_NUM_BYTES: (optional) hard-code the module to a certain burst_size 
+* (read and write). The point is: The core is designed to automatically split up 
+* transactions into multiple bursts, if they don't fit into one burst. Axi 
+* imposes a total burst address space maximum of 4KB by specification (actually, 
+* it imposes not crossing 4KB address boundaries, which implies the size 
+* requirement as required, but not sufficient). That means that depending on 
+* i_axi_status_fields.burst_size, bursts might not be allowed to use the full 
+* axi awlen/arlen fields because it could create bursts larger than 4KB.
+* If this parameter is -1 or not set, the core always uses the full awlen/arlen, 
+* and it is up to the user to ensure that the resulting bursts obey the axi 
+* specs (by transaction length or via i_axi_status_fields.burst_size). Any other 
+* value (has to be a power of 2) hard-codes the core to use this burst size 
+* (note that it's passed in bytes here, not the logarithm as in the axi field), 
+* and thus ignore i_axi_status_fields.burst_size. In return the core then 
+* ensures that bursts are always limited to a total size of 4KB. Still does NOT 
+* ensure address alignment!! That still is left to the user (but as 
+* a consequence, any user transaction with a 4KB-aligned start address will 
+* automatically obey the axi burst address/size requirements)
 *
 * INTERNALS:
 *
@@ -114,7 +132,8 @@ module axi4_master #(
     // maximum number of data words in one user transaction - meaning one time 
     // asserting trigger (both for read and write)
     parameter                           MAX_TOTAL_TRANSACTION_LENGTH    = 128,
-    parameter                           REGISTER_DATA_STREAM            = 0
+    parameter                           REGISTER_DATA_STREAM            = 0,
+    parameter                           AXI_BURST_NUM_BYTES             = -1
 ) (
     input                                   clk,
     input                                   rst_n,

@@ -29,6 +29,7 @@ package axi_lib_pkg;
     parameter                   AXI4_BIT_PROT_SECURE    = 1;
     parameter                   AXI4_BIT_PROT_DATA      = 2;
 
+    localparam                  AXI_BURST_MAX_TOTAL_BYTES   = 4096;
     localparam                  AXI4_MAX_BURST_LEN      = 256;
     localparam                  AXI3_MAX_BURST_LEN      = 16;
 
