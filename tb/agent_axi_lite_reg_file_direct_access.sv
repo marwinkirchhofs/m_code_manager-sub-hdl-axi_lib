@@ -100,9 +100,11 @@ package axi_lite_reg_file_direct_access_sim_pkg;
             case (master)
                 "hw": begin
                     if_axi_lite_reg_file_direct_access.if_reg_file_hw.write_req = 1;
+                    if_axi_lite_reg_file_direct_access.if_reg_file_hw.write_mask = '1;
                     if_axi_lite_reg_file_direct_access.if_reg_file_hw.write_data = value;
                     @(posedge if_axi_lite_reg_file_direct_access.clk);
                     if_axi_lite_reg_file_direct_access.if_reg_file_hw.write_req = 0;
+                    if_axi_lite_reg_file_direct_access.if_reg_file_hw.write_mask = '0;
                 end
                 "axi": begin
                     axi_data.data[0] = {<<{value}};
@@ -151,7 +153,7 @@ package axi_lite_reg_file_direct_access_sim_pkg;
             // no idea yet if that is supposed to be a constant variable, a test 
             // argument or a parameter (but most likely not a constant variable, 
             // tbh...)
-            const int base_address = 'h20;
+            const int base_address = 'h200;
 
             // TODO: hardcoded
             logic [7:0] address;
@@ -181,7 +183,7 @@ package axi_lite_reg_file_direct_access_sim_pkg;
             address = base_address + 8'h00;
             fork
             begin
-                wait_cycles_ev(this.ev_clk, 2);
+                wait_cycles_ev(this.ev_clk, 3);
                 this.write("hw", write_data);
             end
             begin

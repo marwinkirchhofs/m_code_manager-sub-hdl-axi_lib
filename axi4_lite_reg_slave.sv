@@ -316,13 +316,20 @@ module axi4_lite_reg_slave #(
         case (st_write_addr)
             ST_AXI_LITE_WRITE_READY: begin
                 if (if_axi.awready & if_axi.awvalid) begin
-                    if (ADD_WRITE_LATENCY > 0) begin
-                        // remember: you don't have to go through the extra 
-                        // state, if you don't require additional write latency
-                        st_write_addr_next = ST_AXI_LITE_WRITE_RESOLVE;
-                    end else begin
-                        st_write_addr_next = ST_AXI_LITE_WRITE_VALID;
-                    end
+                    // no need to go through any address resolve state, because 
+                    // that ST_AXI_LITE_WRITE_VALID in fact is that state.  
+                    // address is registered in this cycle, next cycle is both 
+                    // assertion of wready and the reg file id and item lookup 
+                    // into reg_file_item_write -> end of next cycle it's clear 
+                    // what to do with incoming data
+                    st_write_addr_next = ST_AXI_LITE_WRITE_VALID;
+//                     if (ADD_WRITE_LATENCY > 0) begin
+//                         // remember: you don't have to go through the extra 
+//                         // state, if you don't require additional write latency
+//                         st_write_addr_next = ST_AXI_LITE_WRITE_RESOLVE;
+//                     end else begin
+//                         st_write_addr_next = ST_AXI_LITE_WRITE_VALID;
+//                     end
                 end
             end
             ST_AXI_LITE_WRITE_RESOLVE: begin
