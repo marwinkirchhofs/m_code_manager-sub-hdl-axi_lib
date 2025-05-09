@@ -66,7 +66,7 @@
 *     * no support for AXI3 write interleaving and locked transfers
 *     * All AXI4-only signals are currently still driven, regardless of 
 *     AXI_VERSION.
-* :AXI_BURST_NUM_BYTES: (optional) hard-code the module to a certain burst_size 
+* :AXI_BURST_ITEM_BYTES: (optional) hard-code the module to a certain burst_size 
 * (read and write). The point is: The core is designed to automatically split up 
 * transactions into multiple bursts, if they don't fit into one burst. Axi 
 * imposes a total burst address space maximum of 4KB by specification (actually, 
@@ -84,6 +84,11 @@
 * ensure address alignment!! That still is left to the user (but as 
 * a consequence, any user transaction with a 4KB-aligned start address will 
 * automatically obey the axi burst address/size requirements)
+* Deliberate decision to not support dynamic burst_size while providing 
+* automatic burst size adjustment because that was deemed problematic in terms 
+* of logic path depth. This core is designed for high clock frequency operation, 
+* and will assumingly be used with a hard-wired burst_size in most cases anyway, 
+* when it connects to a single slave.
 *
 * INTERNALS:
 *
@@ -133,7 +138,7 @@ module axi4_master #(
     // asserting trigger (both for read and write)
     parameter                           MAX_TOTAL_TRANSACTION_LENGTH    = 128,
     parameter                           REGISTER_DATA_STREAM            = 0,
-    parameter                           AXI_BURST_NUM_BYTES             = -1
+    parameter                           AXI_BURST_ITEM_BYTES             = -1
 ) (
     input                                   clk,
     input                                   rst_n,
@@ -205,10 +210,25 @@ module axi4_master #(
         begin: gen_check_user_data_width_range
             $error($sformatf("Invalid (non-power of 2) USER_DATA_WIDTH (%0d)", USER_DATA_WIDTH));
         end
+
+        if (    AXI_BURST_ITEM_BYTES != -1 &&
+                AXI_BURST_ITEM_BYTES != $pow(2, $clog2(AXI_BURST_ITEM_BYTES))) begin
+            $error("AXI_BURST_ITEM_BYTES must be -1 or a power of 2");
+        end
+        if (AXI_BURST_ITEM_BYTES > 128) begin
+            $error("AXI_BURST_ITEM_BYTES can't be >128");
+        end
+        if (AXI_BURST_ITEM_BYTES == 0) begin
+            $error("AXI_BURST_ITEM_BYTES can't be 0");
+        end
     end
     endgenerate
 
-    localparam AXI_MAX_BURST_LEN = (AXI_VERSION == "AXI4") ? AXI4_MAX_BURST_LEN : AXI3_MAX_BURST_LEN;
+    localparam AXI_VER_MAX_BURST_LEN =
+            (AXI_VERSION == "AXI4") ? AXI4_MAX_BURST_LEN : AXI3_MAX_BURST_LEN;
+    localparam AXI_MAX_BURST_LEN = (AXI_BURST_ITEM_BYTES == -1) ?
+                            AXI_VER_MAX_BURST_LEN :
+                            AXI_BURST_MAX_TOTAL_BYTES/AXI_BURST_ITEM_BYTES;
     localparam AXI_BURST_LEN_WIDTH = $clog2(AXI_MAX_BURST_LEN);
 
 
@@ -216,13 +236,19 @@ module axi4_master #(
     // HELPERS
     //----------------------------------------------------------
 
+    /*
+     * Increment 'address' by the address space of one burst -> return the 
+     * correct start address for the next burst, based on the start address and 
+     * burst_size of the current burst
+     */
     function automatic logic [AXI_ADDR_WIDTH-1:0] fun_burst_incr_axi_address (
         logic [AXI_ADDR_WIDTH-1:0] address, logic [2:0] burst_size);
         // note: technically you don't need the clog2 part, because 
         // AXI_MAX_BURST_LEN is a power of 2. It's just implemented this way 
         // such that really no tool gets to the idea of inferring a DSP or mult 
         // circuit, while it's guaranteed to be a bit shift.
-        return address + ((32'b1<<burst_size) << $clog2(AXI_MAX_BURST_LEN));
+        // (more readable: address + burst_item_bytes*num_burst_items)
+        return address + ((33'b1<<burst_size) << $clog2(AXI_MAX_BURST_LEN));
     endfunction
 
 
@@ -254,6 +280,8 @@ module axi4_master #(
     logic [AXI_ID_WIDTH-1:0]                reg_axi_id;
     logic                                   reg_direction;
     logic [AXI_ADDR_WIDTH-1:0]              axi_address;
+
+    logic [2:0]                             axi_burst_size_intern;
 
     // AXI HANDSHAKE MULTIPLEX
     // since the core does either read or write, you can multiplex the address 
@@ -349,8 +377,8 @@ module axi4_master #(
     // CONNECT AXI TRANSACTION PARAMETERS
     // (to be honest, I could've done the assigning to axi right away when 
     // registering the transaction parameters. Anyways...)
-    assign if_axi.awsize            = reg_axi_status_fields.burst_size;
-    assign if_axi.arsize            = reg_axi_status_fields.burst_size;
+    assign if_axi.awsize            = axi_burst_size_intern;
+    assign if_axi.arsize            = axi_burst_size_intern;
     assign if_axi.awburst           = reg_axi_status_fields.burst_type;
     assign if_axi.arburst           = reg_axi_status_fields.burst_type;
     assign if_axi.awcache           = reg_axi_status_fields.cache;
@@ -467,7 +495,7 @@ module axi4_master #(
                     if_axi.wdata                <= 
                             if_data_stream_write.data<<burst_item_start_bit;
                     if_axi.wstrb                <=
-                        ((1<<(1<<reg_axi_status_fields.burst_size))-1)<<burst_item_start_lane;
+                        ((1<<(1<<axi_burst_size_intern))-1)<<burst_item_start_lane;
                 end else if (if_axi.wvalid & if_axi.wready) begin
                     write_reg_valid             <= 1'b0;
                 end
@@ -558,7 +586,7 @@ module axi4_master #(
                     if_axi.wdata                = if_data_stream_write.data<<burst_item_start_bit;
                     if_axi.wvalid               = if_data_stream_write.valid;
                     if_axi.wstrb                =
-                        ((1<<(1<<reg_axi_status_fields.burst_size))-1)<<burst_item_start_lane;
+                        ((1<<(1<<axi_burst_size_intern))-1)<<burst_item_start_lane;
                     if_data_stream_write.ready  = if_axi.wready;
                     if_data_stream_read.data    = if_axi.rdata>>burst_item_start_bit;
                     if_data_stream_read.valid   = if_axi.rvalid;
@@ -694,7 +722,7 @@ module axi4_master #(
                                         count_bursts <= count_bursts - 1;
                                         axi_address <= fun_burst_incr_axi_address(
                                                             axi_address,
-                                                            reg_axi_status_fields.burst_size);
+                                                            axi_burst_size_intern);
                                     end
                                 endcase
                             end
@@ -771,7 +799,7 @@ module axi4_master #(
                 case (reg_axi_status_fields.burst_type)
                     AXI4_BURST_INCR: begin
                         burst_item_start_lane <= 
-                                burst_item_start_lane + (1<<reg_axi_status_fields.burst_size);
+                                burst_item_start_lane + (1<<axi_burst_size_intern);
                     end
                     default: begin
                         // TODO: add the AXI4_BURST_WRAP case, once that is 
@@ -915,6 +943,16 @@ module axi4_master #(
             end
         end
     end
+
+    generate
+    begin: gen_axi_burst_size
+        if (AXI_BURST_ITEM_BYTES == -1) begin
+            assign axi_burst_size_intern = reg_axi_status_fields.burst_size;
+        end else begin
+            assign axi_burst_size_intern = $clog2(AXI_BURST_ITEM_BYTES);
+        end
+    end
+    endgenerate
 
     //----------------------------
     // UNSUPPORTED SIGNALS
