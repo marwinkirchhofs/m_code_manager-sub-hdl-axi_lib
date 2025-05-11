@@ -36,8 +36,6 @@ table definition is documented here.
           for message registers, to know that messages in a subsequent read is 
           new with respect to the information that was just read)
 * dual access registers (hardware and software (via axi lite))
-* parameterizable multicycle data path from register file to axi read data for 
-  clock frequency optimization - see below under operation
 
 ## Not Supported
 
@@ -94,14 +92,7 @@ Formally, the following needs to be present:
 
 The core has an inherent read latency of two processing cycles between address 
 handshake and data valid (first cycle registering address, second cycle fetch 
-data from register file). The data fetch path proved to be a critical path in 
-clock frequency optimization. The lookup complexity probably also depends on the 
-register file size and/or address bitwidth. The second cycle can be extended by 
-the parameter `ADD_READ_LATENCY`, which purely delays the read valid signal, but 
-but does not touch issuing the data fetch - which allows for a multicycle path 
-from register file to axi data of `1+ADD_READ_LATENCY` clock cycles. The 
-parameter thus really only denotes the **additional** latency, not the 
-1 mandatory cycle of fetching data.
+data from register file).
 
 ## PARAMETERS
 

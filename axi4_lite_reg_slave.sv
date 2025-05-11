@@ -46,15 +46,7 @@ module axi4_lite_reg_slave #(
     parameter                           AXI_DATA_WIDTH          = 32,
     parameter                           AXI_BASE_ADDR           = '0,
     parameter                           REGISTER_WIDTH          = 32,
-    parameter                           NUM_REGISTERS           = 16,
-    // delay reading from the register file for timing optimization. Is 
-    // implemented as a parallel wait, not as a pipeline, such that the data 
-    // path from register file to axi can be made multi-cycle if READ_LATENCY>1
-    // (note that the core has a read latency of 2 anyways (register address, 
-    // fetch data), the parameter just sets the additional latency)
-    parameter                           ADD_READ_LATENCY        = 0,
-    // same story like read, but for write
-    parameter                           ADD_WRITE_LATENCY       = 0
+    parameter                           NUM_REGISTERS           = 16
 ) (
     input                                   clk,
     input                                   rst_n,
@@ -64,40 +56,6 @@ module axi4_lite_reg_slave #(
     output logic    [NUM_REGISTERS-1:0]     o_write_trigger
 );
 
-    typedef logic [ADDR_WIDTH-1:0] axi_addr_t;
-    /*
-    * be aware: the function does synthesize, but as expected, it can introduce 
-    * a considerable timing problem. You are comparing a 32-bit register against 
-    * a good number of values using LUTs. Already for only 3 integers in the map 
-    * table, that gives 3 hierarchy levels of LUTs for the CE port. Might get 
-* worse with a larger number of choices. Good thing is there is no fanout...
-    */
-    function automatic reg_file_item_t get_reg_item_from_axi_addr(
-        axi_addr_t axi_addr,
-        axi_addr_t base_address = '0
-    );
-        reg_file_item_t         hit;
-        reg_entry_t             candidate_entry;
-        hit.entry_found = 1'b0;
-
-        for (int i=0; i<REG_FILE_NUM_REGISTERS; i++) begin
-            // (why the extra line for the candidate_entry, and not just do 
-            // AXI_LITE_REG_MAP_TABLE[i].addr in the condition? xelab (aka 
-            // vivado) fails to resolve the former, and as a result you can't 
-            // use hw emulation when exporting anything containing this core as 
-            // an IP for vitis (maybe only applies to alveo, haven't tried with 
-            // "standard" hardware like embedded ARM - but in the end it's about 
-            // xelab, not the platform)
-            candidate_entry = AXI_LITE_REG_MAP_TABLE[i];
-            if (axi_addr_t'(candidate_entry.addr) == (axi_addr - base_address)) begin
-                hit.entry_found = 1'b1;
-                hit.id = reg_file_id_t'(i);
-                hit.entry = AXI_LITE_REG_MAP_TABLE[i];
-            end
-        end
-
-        return hit;
-    endfunction
 
     //----------------------------------------------------------
     // INTERNAL SIGNALS
@@ -112,7 +70,6 @@ module axi4_lite_reg_slave #(
     reg_file_addr_t                         reg_read_reg_file_addr;
     reg_file_id_t                           reg_file_id_read;
     logic                                   fetch_read_data;
-//     logic   [$clog2(ADD_READ_LATENCY+1)-1:0]    count_resolve_read_addr;
 
     // AXI WRITE
     reg_file_item_t                         reg_file_item_write;
@@ -120,8 +77,6 @@ module axi4_lite_reg_slave #(
 
     st_axi_lite_write_addr_t                st_write_addr;
     st_axi_lite_write_addr_t                st_write_addr_next;
-
-//     logic   [$clog2(ADD_WRITE_LATENCY+1)-1:0]   count_resolve_write_addr;
 
     // REGISTER FILE WRITE ACCESS
     // access to the register file write needs to be multiplexed, because the 
@@ -145,7 +100,6 @@ module axi4_lite_reg_slave #(
     // READ
     //----------------------------
 
-//     assign reg_file_item_read = get_reg_item_from_axi_addr(reg_read_reg_file_addr, AXI_BASE_ADDR);
     assign reg_file_item_read.entry = AXI_LITE_REG_MAP_TABLE[reg_file_id_read];
     assign reg_file_item_read.entry_found =
                             (reg_file_id_read == REG_FILE_ID_INVALID) ? 1'b0 : 1'b1;
@@ -168,7 +122,6 @@ module axi4_lite_reg_slave #(
     begin: fsm_read_addr
         case (st_read_addr)
             ST_AXI_LITE_READ_READY: begin
-//                 if (if_axi.arready & if_axi.arvalid) begin
                 if (if_axi.hs_ar()) begin
                     st_read_addr_next = ST_AXI_LITE_READ_FETCH;
                 end else begin
@@ -180,15 +133,9 @@ module axi4_lite_reg_slave #(
                 // file (otherwise you have a full path from the read address to 
                 // the register file, on which you also need to resolve the 
                 // address into the correct register ID. Goodbye clock frequency)
-//                 if (count_resolve_read_addr == '0) begin
-//                     st_read_addr_next = ST_AXI_LITE_READ_VALID;
-//                 end else begin
-//                     st_read_addr_next = st_read_addr;
-//                 end
                 st_read_addr_next = ST_AXI_LITE_READ_VALID;
             end
             ST_AXI_LITE_READ_VALID: begin
-//                 if (if_axi.rvalid & if_axi.rready) begin
                 if (if_axi.hs_r()) begin
                     st_read_addr_next = ST_AXI_LITE_READ_READY;
                 end else begin
@@ -203,33 +150,13 @@ module axi4_lite_reg_slave #(
 
     assign fetch_read_data = (st_read_addr == ST_AXI_LITE_READ_FETCH);
 
-    // READ FETCH
-//     generate begin: gen_read_fetch_count
-//         if (ADD_READ_LATENCY>0) begin
-//             always_ff @(posedge clk) begin
-//                 if (fetch_read_data) begin
-//                     count_resolve_read_addr <= ADD_READ_LATENCY;
-//                 end else begin
-//                     count_resolve_read_addr <= count_resolve_read_addr - 1;
-//                 end
-//             end
-//         end else begin
-//             assign count_resolve_read_addr = '0;
-//         end
-//     end endgenerate
-
     // READ OPERATION
 
     // register address
     always_ff @(posedge clk)
     begin: proc_register_read_address
-//         fetch_read_data <= 1'b0;
         if (if_axi.hs_ar()) begin
             reg_read_reg_file_addr       <= if_axi.araddr[REG_FILE_AXI_ADDR_WIDTH-1:0];
-
-//             if (st_read_addr == ST_AXI_LITE_READ_READY) begin
-//                 fetch_read_data <= 1'b1;
-//             end
         end
     end
 
@@ -255,7 +182,6 @@ module axi4_lite_reg_slave #(
             if_axi.rdata                    <= if_axi.rdata;
             if_axi.rresp                    <= if_axi.rresp;
 
-//             if (if_axi.arready & if_axi.arvalid) begin
             if (fetch_read_data) begin
 
                 // check for a valid address
@@ -284,7 +210,6 @@ module axi4_lite_reg_slave #(
     // WRITE
     //----------------------------
 
-//     assign reg_file_item_write = get_reg_item_from_axi_addr(if_axi.awaddr, AXI_BASE_ADDR);
     assign reg_file_item_write.entry = AXI_LITE_REG_MAP_TABLE[reg_file_id_write];
     assign reg_file_item_write.entry_found =
                             (reg_file_id_write == REG_FILE_ID_INVALID) ? 1'b0 : 1'b1;
@@ -323,19 +248,9 @@ module axi4_lite_reg_slave #(
                     // into reg_file_item_write -> end of next cycle it's clear 
                     // what to do with incoming data
                     st_write_addr_next = ST_AXI_LITE_WRITE_VALID;
-//                     if (ADD_WRITE_LATENCY > 0) begin
-//                         // remember: you don't have to go through the extra 
-//                         // state, if you don't require additional write latency
-//                         st_write_addr_next = ST_AXI_LITE_WRITE_RESOLVE;
-//                     end else begin
-//                         st_write_addr_next = ST_AXI_LITE_WRITE_VALID;
-//                     end
                 end
             end
             ST_AXI_LITE_WRITE_RESOLVE: begin
-//                 if (count_resolve_write_addr == '0) begin
-//                     st_write_addr_next = ST_AXI_LITE_WRITE_VALID;
-//                 end
                 st_write_addr_next = ST_AXI_LITE_WRITE_VALID;
             end
             ST_AXI_LITE_WRITE_VALID: begin
@@ -354,21 +269,6 @@ module axi4_lite_reg_slave #(
         endcase
     end
 
-    // WRITE RESOLVE
-//     generate begin: gen_write_resolve_count
-//         if (ADD_WRITE_LATENCY>0) begin
-//             always_ff @(posedge clk) begin
-//                 if (if_axi.hs_aw()) begin
-//                     count_resolve_write_addr <= ADD_WRITE_LATENCY;
-//                 end else begin
-//                     count_resolve_write_addr <= count_resolve_write_addr - 1;
-//                 end
-//             end
-//         end else begin
-//             assign count_resolve_write_addr = '0;
-//         end
-//     end endgenerate
-
     // WRITE OPERATION
 
     // register address
@@ -385,13 +285,11 @@ module axi4_lite_reg_slave #(
             // note: some signals here would not need a reset. The resets are 
             // added to allow consistency in control sets help with placement.
             reg_write_data                  <= '0;
-//             reg_file_id_write                    <= '0;
             reg_write_req                   <= 1'b0;
             o_write_trigger                 <= '0;
         end else begin
 
             reg_write_data                  <= '0;
-//             reg_file_id_write                    <= '0;
             reg_write_req                   <= 1'b0;
             o_write_trigger                 <= '0;
 
@@ -403,7 +301,6 @@ module axi4_lite_reg_slave #(
 
                     // TODO: mask data
                     if (reg_file_item_write.entry.memory_mapped) begin
-//                         reg_file_id_write   <= reg_file_item_write.id;
                         reg_write_req       <= 1'b1;
                     end
                     if (reg_file_item_write.entry.trigger_on_write) begin

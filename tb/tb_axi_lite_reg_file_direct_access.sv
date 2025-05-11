@@ -33,7 +33,6 @@ localparam                      RST_ACTIVE = RST_ACTIVE_LOW;
 
 localparam                      REGISTER_WIDTH = 32;
 localparam                      PARALLEL_ACCESS = 1;
-localparam                      ADD_READ_LATENCY = 0;
 
 localparam                      AXI_ADDR_WIDTH = 32;
 localparam                      AXI_ID_WIDTH = 0;
@@ -87,8 +86,7 @@ axi_lite_reg_file_direct_access #(
     .AXI_DATA_WIDTH             (REGISTER_WIDTH),
     .AXI_BASE_ADDR              (AXI_BASE_ADDR),
     .REGISTER_WIDTH             (REGISTER_WIDTH),
-    .NUM_REGISTERS              (REG_FILE_NUM_REGISTERS),
-    .ADD_READ_LATENCY           (ADD_READ_LATENCY)
+    .NUM_REGISTERS              (REG_FILE_NUM_REGISTERS)
 ) inst_axi_lite_reg_file_direct_access (
     .clk (if_axi_lite_reg_file_direct_access.clk),
     .rst_n (if_rst.rst),
